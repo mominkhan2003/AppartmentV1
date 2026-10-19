@@ -8,10 +8,10 @@ declare(strict_types=1);
  */
 
 return [
-    'host' => 'localhost',
-    'database' => 'YOUR_CPANEL_DATABASE_NAME',
-    'username' => 'YOUR_CPANEL_DATABASE_USER',
-    'password' => 'YOUR_DATABASE_PASSWORD',
+    'host' => 'premium281.web-hosting.com',
+    'database' => 'prosdfwo_AppartmentV1',
+    'username' => 'prosdfwo_appartmentV1',
+    'password' => 'Appartment@2026',
     'charset' => 'utf8mb4',
 
     // ---- Optional application settings (defaults are used for missing keys) -------------------
