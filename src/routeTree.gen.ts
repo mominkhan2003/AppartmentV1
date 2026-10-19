@@ -19,18 +19,24 @@ import { Route as AuthenticatedBalanceRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedBookingsRouteImport } from './routes/_authenticated/bookings'
 import { Route as AuthenticatedCleaningRouteImport } from './routes/_authenticated/cleaning'
 import { Route as AuthenticatedContactsRouteImport } from './routes/_authenticated/contacts'
+import { Route as AuthenticatedContentRouteImport } from './routes/_authenticated/content'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
+import { Route as AuthenticatedDonationsRouteImport } from './routes/_authenticated/donations'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
+import { Route as AuthenticatedEventsPlanRouteImport } from './routes/_authenticated/events-plan'
 import { Route as AuthenticatedExpensesRouteImport } from './routes/_authenticated/expenses'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedIssuesRouteImport } from './routes/_authenticated/issues'
 import { Route as AuthenticatedLostFoundRouteImport } from './routes/_authenticated/lost-found'
+import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedNoticesRouteImport } from './routes/_authenticated/notices'
+import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedPollsRouteImport } from './routes/_authenticated/polls'
 import { Route as AuthenticatedResidentsRouteImport } from './routes/_authenticated/residents'
 import { Route as AuthenticatedRulesRouteImport } from './routes/_authenticated/rules'
 import { Route as AuthenticatedShoppingRouteImport } from './routes/_authenticated/shopping'
+import { Route as AuthenticatedStudioRouteImport } from './routes/_authenticated/studio'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -81,6 +87,11 @@ const AuthenticatedContactsRoute = AuthenticatedContactsRouteImport.update({
   path: '/contacts',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedContentRoute = AuthenticatedContentRouteImport.update({
+  id: '/content',
+  path: '/content',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -91,9 +102,19 @@ const AuthenticatedDocumentsRoute = AuthenticatedDocumentsRouteImport.update({
   path: '/documents',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDonationsRoute = AuthenticatedDonationsRouteImport.update({
+  id: '/donations',
+  path: '/donations',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedEventsRoute = AuthenticatedEventsRouteImport.update({
   id: '/events',
   path: '/events',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedEventsPlanRoute = AuthenticatedEventsPlanRouteImport.update({
+  id: '/events-plan',
+  path: '/events-plan',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedExpensesRoute = AuthenticatedExpensesRouteImport.update({
@@ -116,11 +137,22 @@ const AuthenticatedLostFoundRoute = AuthenticatedLostFoundRouteImport.update({
   path: '/lost-found',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMediaRoute = AuthenticatedMediaRouteImport.update({
+  id: '/media',
+  path: '/media',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedNoticesRoute = AuthenticatedNoticesRouteImport.update({
   id: '/notices',
   path: '/notices',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedNotificationsRoute =
+  AuthenticatedNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPollsRoute = AuthenticatedPollsRouteImport.update({
   id: '/polls',
   path: '/polls',
@@ -141,6 +173,11 @@ const AuthenticatedShoppingRoute = AuthenticatedShoppingRouteImport.update({
   path: '/shopping',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedStudioRoute = AuthenticatedStudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -152,18 +189,24 @@ export interface FileRoutesByFullPath {
   '/bookings': typeof AuthenticatedBookingsRoute
   '/cleaning': typeof AuthenticatedCleaningRoute
   '/contacts': typeof AuthenticatedContactsRoute
+  '/content': typeof AuthenticatedContentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/donations': typeof AuthenticatedDonationsRoute
   '/events': typeof AuthenticatedEventsRoute
+  '/events-plan': typeof AuthenticatedEventsPlanRoute
   '/expenses': typeof AuthenticatedExpensesRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/issues': typeof AuthenticatedIssuesRoute
   '/lost-found': typeof AuthenticatedLostFoundRoute
+  '/media': typeof AuthenticatedMediaRoute
   '/notices': typeof AuthenticatedNoticesRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/polls': typeof AuthenticatedPollsRoute
   '/residents': typeof AuthenticatedResidentsRoute
   '/rules': typeof AuthenticatedRulesRoute
   '/shopping': typeof AuthenticatedShoppingRoute
+  '/studio': typeof AuthenticatedStudioRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -175,18 +218,24 @@ export interface FileRoutesByTo {
   '/bookings': typeof AuthenticatedBookingsRoute
   '/cleaning': typeof AuthenticatedCleaningRoute
   '/contacts': typeof AuthenticatedContactsRoute
+  '/content': typeof AuthenticatedContentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/donations': typeof AuthenticatedDonationsRoute
   '/events': typeof AuthenticatedEventsRoute
+  '/events-plan': typeof AuthenticatedEventsPlanRoute
   '/expenses': typeof AuthenticatedExpensesRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/issues': typeof AuthenticatedIssuesRoute
   '/lost-found': typeof AuthenticatedLostFoundRoute
+  '/media': typeof AuthenticatedMediaRoute
   '/notices': typeof AuthenticatedNoticesRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/polls': typeof AuthenticatedPollsRoute
   '/residents': typeof AuthenticatedResidentsRoute
   '/rules': typeof AuthenticatedRulesRoute
   '/shopping': typeof AuthenticatedShoppingRoute
+  '/studio': typeof AuthenticatedStudioRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -200,18 +249,24 @@ export interface FileRoutesById {
   '/_authenticated/bookings': typeof AuthenticatedBookingsRoute
   '/_authenticated/cleaning': typeof AuthenticatedCleaningRoute
   '/_authenticated/contacts': typeof AuthenticatedContactsRoute
+  '/_authenticated/content': typeof AuthenticatedContentRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
+  '/_authenticated/donations': typeof AuthenticatedDonationsRoute
   '/_authenticated/events': typeof AuthenticatedEventsRoute
+  '/_authenticated/events-plan': typeof AuthenticatedEventsPlanRoute
   '/_authenticated/expenses': typeof AuthenticatedExpensesRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
   '/_authenticated/issues': typeof AuthenticatedIssuesRoute
   '/_authenticated/lost-found': typeof AuthenticatedLostFoundRoute
+  '/_authenticated/media': typeof AuthenticatedMediaRoute
   '/_authenticated/notices': typeof AuthenticatedNoticesRoute
+  '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/polls': typeof AuthenticatedPollsRoute
   '/_authenticated/residents': typeof AuthenticatedResidentsRoute
   '/_authenticated/rules': typeof AuthenticatedRulesRoute
   '/_authenticated/shopping': typeof AuthenticatedShoppingRoute
+  '/_authenticated/studio': typeof AuthenticatedStudioRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -225,18 +280,24 @@ export interface FileRouteTypes {
     | '/bookings'
     | '/cleaning'
     | '/contacts'
+    | '/content'
     | '/dashboard'
     | '/documents'
+    | '/donations'
     | '/events'
+    | '/events-plan'
     | '/expenses'
     | '/inventory'
     | '/issues'
     | '/lost-found'
+    | '/media'
     | '/notices'
+    | '/notifications'
     | '/polls'
     | '/residents'
     | '/rules'
     | '/shopping'
+    | '/studio'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -248,18 +309,24 @@ export interface FileRouteTypes {
     | '/bookings'
     | '/cleaning'
     | '/contacts'
+    | '/content'
     | '/dashboard'
     | '/documents'
+    | '/donations'
     | '/events'
+    | '/events-plan'
     | '/expenses'
     | '/inventory'
     | '/issues'
     | '/lost-found'
+    | '/media'
     | '/notices'
+    | '/notifications'
     | '/polls'
     | '/residents'
     | '/rules'
     | '/shopping'
+    | '/studio'
   id:
     | '__root__'
     | '/'
@@ -272,18 +339,24 @@ export interface FileRouteTypes {
     | '/_authenticated/bookings'
     | '/_authenticated/cleaning'
     | '/_authenticated/contacts'
+    | '/_authenticated/content'
     | '/_authenticated/dashboard'
     | '/_authenticated/documents'
+    | '/_authenticated/donations'
     | '/_authenticated/events'
+    | '/_authenticated/events-plan'
     | '/_authenticated/expenses'
     | '/_authenticated/inventory'
     | '/_authenticated/issues'
     | '/_authenticated/lost-found'
+    | '/_authenticated/media'
     | '/_authenticated/notices'
+    | '/_authenticated/notifications'
     | '/_authenticated/polls'
     | '/_authenticated/residents'
     | '/_authenticated/rules'
     | '/_authenticated/shopping'
+    | '/_authenticated/studio'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -365,6 +438,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedContactsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/content': {
+      id: '/_authenticated/content'
+      path: '/content'
+      fullPath: '/content'
+      preLoaderRoute: typeof AuthenticatedContentRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -379,11 +459,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDocumentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/donations': {
+      id: '/_authenticated/donations'
+      path: '/donations'
+      fullPath: '/donations'
+      preLoaderRoute: typeof AuthenticatedDonationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/events': {
       id: '/_authenticated/events'
       path: '/events'
       fullPath: '/events'
       preLoaderRoute: typeof AuthenticatedEventsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/events-plan': {
+      id: '/_authenticated/events-plan'
+      path: '/events-plan'
+      fullPath: '/events-plan'
+      preLoaderRoute: typeof AuthenticatedEventsPlanRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/expenses': {
@@ -414,11 +508,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLostFoundRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/media': {
+      id: '/_authenticated/media'
+      path: '/media'
+      fullPath: '/media'
+      preLoaderRoute: typeof AuthenticatedMediaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/notices': {
       id: '/_authenticated/notices'
       path: '/notices'
       fullPath: '/notices'
       preLoaderRoute: typeof AuthenticatedNoticesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/notifications': {
+      id: '/_authenticated/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/polls': {
@@ -449,6 +557,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedShoppingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/studio': {
+      id: '/_authenticated/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof AuthenticatedStudioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -459,18 +574,24 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBookingsRoute: typeof AuthenticatedBookingsRoute
   AuthenticatedCleaningRoute: typeof AuthenticatedCleaningRoute
   AuthenticatedContactsRoute: typeof AuthenticatedContactsRoute
+  AuthenticatedContentRoute: typeof AuthenticatedContentRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
+  AuthenticatedDonationsRoute: typeof AuthenticatedDonationsRoute
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
+  AuthenticatedEventsPlanRoute: typeof AuthenticatedEventsPlanRoute
   AuthenticatedExpensesRoute: typeof AuthenticatedExpensesRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
   AuthenticatedIssuesRoute: typeof AuthenticatedIssuesRoute
   AuthenticatedLostFoundRoute: typeof AuthenticatedLostFoundRoute
+  AuthenticatedMediaRoute: typeof AuthenticatedMediaRoute
   AuthenticatedNoticesRoute: typeof AuthenticatedNoticesRoute
+  AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedPollsRoute: typeof AuthenticatedPollsRoute
   AuthenticatedResidentsRoute: typeof AuthenticatedResidentsRoute
   AuthenticatedRulesRoute: typeof AuthenticatedRulesRoute
   AuthenticatedShoppingRoute: typeof AuthenticatedShoppingRoute
+  AuthenticatedStudioRoute: typeof AuthenticatedStudioRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -480,18 +601,24 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBookingsRoute: AuthenticatedBookingsRoute,
   AuthenticatedCleaningRoute: AuthenticatedCleaningRoute,
   AuthenticatedContactsRoute: AuthenticatedContactsRoute,
+  AuthenticatedContentRoute: AuthenticatedContentRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDocumentsRoute: AuthenticatedDocumentsRoute,
+  AuthenticatedDonationsRoute: AuthenticatedDonationsRoute,
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,
+  AuthenticatedEventsPlanRoute: AuthenticatedEventsPlanRoute,
   AuthenticatedExpensesRoute: AuthenticatedExpensesRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
   AuthenticatedIssuesRoute: AuthenticatedIssuesRoute,
   AuthenticatedLostFoundRoute: AuthenticatedLostFoundRoute,
+  AuthenticatedMediaRoute: AuthenticatedMediaRoute,
   AuthenticatedNoticesRoute: AuthenticatedNoticesRoute,
+  AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedPollsRoute: AuthenticatedPollsRoute,
   AuthenticatedResidentsRoute: AuthenticatedResidentsRoute,
   AuthenticatedRulesRoute: AuthenticatedRulesRoute,
   AuthenticatedShoppingRoute: AuthenticatedShoppingRoute,
+  AuthenticatedStudioRoute: AuthenticatedStudioRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -1,5 +1,16 @@
 import { ShoppingBasket, Megaphone, CalendarDays, CalendarClock, Vote, Package, Files, Phone, BookOpen, Search } from "lucide-react";
-import type { Database } from "@/integrations/supabase/types";
+import type { HubItemDto, HubResponseDto } from "@/lib/flat-actions";
+
+export type HubItem = HubItemDto;
+export type HubResponse = HubResponseDto;
+
+export function payloadOf(item: HubItem): Record<string, unknown> {
+  return item.payload !== null && typeof item.payload === "object" && !Array.isArray(item.payload) ? (item.payload as Record<string, unknown>) : {};
+}
+export function valueOf(item: HubItem, key: string) {
+  const value = payloadOf(item)[key];
+  return typeof value === "string" ? value : "";
+}
 
 export const hubPages = {
   shopping: { title: "Shopping list", description: "Shared groceries and household essentials.", singular: "shopping item", icon: ShoppingBasket, fields: [{ key: "quantity", label: "Quantity", type: "text" }, { key: "category", label: "Category", type: "text" }], adminOnly: false },
@@ -14,15 +25,7 @@ export const hubPages = {
   "lost-found": { title: "Lost & found", description: "Report missing belongings and claim found items.", singular: "lost or found item", icon: Search, fields: [{ key: "location", label: "Last seen / found at", type: "text" }], adminOnly: false },
 } as const;
 export type HubKind = keyof typeof hubPages;
-export type HubItem = Database["public"]["Tables"]["hub_items"]["Row"];
-export type HubResponse = Database["public"]["Tables"]["hub_responses"]["Row"];
-export function payloadOf(item: HubItem): Record<string, unknown> {
-  return item.payload && typeof item.payload === "object" && !Array.isArray(item.payload) ? item.payload : {};
-}
-export function valueOf(item: HubItem, key: string) {
-  const value = payloadOf(item)[key];
-  return typeof value === "string" ? value : "";
-}
+
 export function pollOptions(item: HubItem): string[] {
   const options = payloadOf(item)["options"];
   return Array.isArray(options) ? options.filter((v): v is string => typeof v === "string") : [];

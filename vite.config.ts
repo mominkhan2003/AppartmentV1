@@ -12,4 +12,15 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      proxy: {
+        // PHP/MySQL backend (backend/api) — `php -S 127.0.0.1:8010 backend/api/index.php`
+        "/api": {
+          target: "http://127.0.0.1:8010",
+          changeOrigin: false,
+        },
+      },
+    },
+  },
 });

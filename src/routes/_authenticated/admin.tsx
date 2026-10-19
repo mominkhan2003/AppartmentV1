@@ -15,8 +15,7 @@ import {
   useRefresh,
   useAudit,
 } from "@/lib/flat";
-import { rpc, checked, pageHead } from "@/lib/flat-actions";
-import { supabase } from "@/integrations/supabase/client";
+import { saveGroup, saveSpace, setWashroomAccessBulk, pageHead } from "@/lib/flat-actions";
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () =>
     pageHead(
@@ -57,21 +56,11 @@ function Admin() {
                     </Button>
                   }
                   onSave={async (d) => {
-                    const { data, error } = await supabase
-                      .from("household_groups")
-                      .insert({ name: text(d, "name"), description: text(d, "description") })
-                      .select("id")
-                      .single();
-                    if (error) throw error;
-                    await checked(
-                      supabase
-                        .from("group_members")
-                        .insert(
-                          d
-                            .getAll("members")
-                            .map((id) => ({ group_id: data.id, resident_id: String(id) })),
-                        ),
-                    );
+                    await saveGroup(undefined, {
+                      name: text(d, "name"),
+                      description: text(d, "description") || null,
+                      members: d.getAll("members").map(String),
+                    });
                     await refresh();
                   }}
                 >
@@ -110,29 +99,11 @@ function Admin() {
                         </Button>
                       }
                       onSave={async (d) => {
-                        await checked(
-                          supabase
-                            .from("household_groups")
-                            .update({ name: text(d, "name"), description: text(d, "description") })
-                            .eq("id", g.id),
-                        );
-                        const members = d.getAll("members").map(String);
-                        if (members.length)
-                          await checked(
-                            supabase.from("group_members").upsert(
-                              members.map((resident_id) => ({ group_id: g.id, resident_id })),
-                              { onConflict: "group_id,resident_id" },
-                            ),
-                          );
-                        const removed = g.members.filter((id) => !members.includes(id));
-                        if (removed.length)
-                          await checked(
-                            supabase
-                              .from("group_members")
-                              .delete()
-                              .eq("group_id", g.id)
-                              .in("resident_id", removed),
-                          );
+                        await saveGroup(g.id, {
+                          name: text(d, "name"),
+                          description: text(d, "description") || null,
+                          members: d.getAll("members").map(String),
+                        });
                         await refresh();
                       }}
                     >
@@ -181,37 +152,9 @@ function Admin() {
                           const capacity = Number(text(d, "capacity"));
                           if (!Number.isInteger(capacity) || capacity < 0)
                             throw new Error("Capacity must be a whole non-negative number");
-                          await checked(
-                            supabase
-                              .from("spaces")
-                              .update({ name: text(d, "name"), capacity, notes: text(d, "notes") })
-                              .eq("id", s.id),
-                          );
+                          await saveSpace(s.id, { name: text(d, "name"), capacity, notes: text(d, "notes") || null });
                           if (s.kind === "bedroom") {
-                            const selected = d.getAll("washrooms").map(String);
-                            if (selected.length)
-                              await checked(
-                                supabase.from("washroom_access").upsert(
-                                  selected.map((washroom_id) => ({
-                                    bedroom_id: s.id,
-                                    washroom_id,
-                                  })),
-                                  { onConflict: "washroom_id,bedroom_id" },
-                                ),
-                              );
-                            const removed = access
-                              .filter(
-                                (a) => a.bedroom_id === s.id && !selected.includes(a.washroom_id),
-                              )
-                              .map((a) => a.washroom_id);
-                            if (removed.length)
-                              await checked(
-                                supabase
-                                  .from("washroom_access")
-                                  .delete()
-                                  .eq("bedroom_id", s.id)
-                                  .in("washroom_id", removed),
-                              );
+                            await setWashroomAccessBulk(s.id, d.getAll("washrooms").map(String));
                           }
                           await refresh();
                         }}

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader, Stat, Empty } from "@/components/flat/Page";
 import { Editor, TextField, Notes, DataState, text } from "@/components/flat/Forms";
 import { eur, toCents, useBalances, useMe, useLedger, useResidents, useRefresh } from "@/lib/flat";
-import { rpc, pageHead } from "@/lib/flat-actions";
+import { recordPayment, addAdjustment, pageHead } from "@/lib/flat-actions";
 import { useState } from "react";
 import { Download } from "lucide-react";
 export const Route = createFileRoute("/_authenticated/balance")({
@@ -94,9 +94,9 @@ function Balance() {
                 if (!Number.isFinite(amount) || amount === 0)
                   throw new Error("Enter a non-zero amount");
                 if (kind === "payment") {
-                  await rpc("record_payment", { _resident_id: id, _amount_cents: amount, _note: text(d, "reason") });
+                  await recordPayment(id, amount, text(d, "reason"));
                 } else {
-                  await rpc("add_adjustment", { _resident_id: id, _amount_cents: amount, _reason: text(d, "reason") });
+                  await addAdjustment(id, amount, text(d, "reason"));
                 }
                 await refresh();
               }}

@@ -1,0 +1,21 @@
+# FlatMate API — Apache config for cPanel (public_html/api/.htaccess)
+# All requests go through the single front controller; nothing else is exposed.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /api/
+  # Serve the file endpoint statically for direct URLs is NOT allowed (permission checks) — route all
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule .* index.php [QSA,L]
+  # Even files that "exist" (none should) fall through to the router for permission checks
+  RewriteCond %{REQUEST_URI} !^/api/index\.php$
+  RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# Do not allow reading any .php or config attached to the API dir itself
+<FilesMatch "\.(cfg|ini|md|bash|htaccess_extra)$">
+  Require all denied
+</FilesMatch>
+
+Options -Indexes
+AddDefaultCharset utf-8
+php_flag display_errors off

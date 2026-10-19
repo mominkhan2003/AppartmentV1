@@ -19,13 +19,10 @@ import {
   useSpaces,
   useMe,
   useRefresh,
-  uploadFile,
   openFile,
 } from "@/lib/flat";
-import { checked, pageHead } from "@/lib/flat-actions";
+import { createIssue, updateIssue, pageHead } from "@/lib/flat-actions";
 import { canManage } from "@/lib/portal-permissions";
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
 export const Route = createFileRoute("/_authenticated/issues")({
   head: () =>
     pageHead(
@@ -61,19 +58,7 @@ function Issues() {
             }
             onSave={async (d) => {
               const file = upload(d);
-              const photo_path = file ? await uploadFile("photos", file) : null;
-              await checked(
-                supabase
-                  .from("issues")
-                  .insert({
-                    description: text(d, "description"),
-                    category: text(d, "category") || "other",
-                    space_id: text(d, "space") || null,
-                    photo_path,
-                    reporter_resident_id: me?.resident?.id ?? null,
-                    status: "open",
-                  }),
-              );
+              await createIssue(d, { reporterResidentId: me?.resident?.id ?? null, photo: file });
               await refresh();
             }}
           >
@@ -123,18 +108,13 @@ function Issues() {
                     </Button>
                   }
                   onSave={async (d) => {
-                    const status = text(d, "status") as Database["public"]["Enums"]["issue_status"];
-                    await checked(
-                      supabase
-                        .from("issues")
-                        .update({
-                          status,
-                          assigned_resident_id: text(d, "assigned") || null,
-                          admin_response: text(d, "response") || null,
-                          resolution_notes: text(d, "resolution") || null,
-                        })
-                        .eq("id", i.id),
-                    );
+                    const status = text(d, "status") as "open" | "acknowledged" | "in_progress" | "resolved";
+                    await updateIssue(i.id, {
+                      status,
+                      assigned_resident_id: text(d, "assigned") || null,
+                      admin_response: text(d, "response") || null,
+                      resolution_notes: text(d, "resolution") || null,
+                    });
                     await refresh();
                   }}
                 >
@@ -179,11 +159,11 @@ function Issues() {
             {i.resolution_notes && (
               <p className="mt-2 text-sm text-success break-words">{i.resolution_notes}</p>
             )}
-            {i.photo_path && (
+            {i.photo_media_id && (
               <Button
                 variant="link"
                 className="mt-2 px-0"
-                onClick={() => openFile("photos", i.photo_path ?? "")}
+                onClick={() => openFile("photos", i.photo_media_id ?? "")}
               >
                 <Image />
                 View photo

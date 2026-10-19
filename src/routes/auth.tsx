@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Home } from "lucide-react";
+import { login, signup, requestPasswordReset } from "@/lib/flat-actions";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -23,29 +24,28 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const nav = useNavigate();
+  const qc = useQueryClient();
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
+  async function afterAuth() {
+    qc.clear();
+    await nav({ to: "/dashboard", replace: true });
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
       if (mode === "in") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        nav({ to: "/dashboard", replace: true });
+        await login(email, password);
+        await afterAuth();
       } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin + "/dashboard", data: { display_name: name } },
-        });
-        if (error) throw error;
-        if (data.session) nav({ to: "/dashboard", replace: true });
-        else toast.success("Check your email to confirm your account.");
+        await signup(email, password, name);
+        await afterAuth();
       }
     } catch (err) {
       toast.error((err as Error).message);
@@ -74,21 +74,30 @@ function AuthPage() {
         </div>
         <div className="space-y-1">
           <Label htmlFor="pw">Password</Label>
-          <Input id="pw" type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <Input id="pw" type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
         <Button className="w-full" disabled={busy}>{mode === "in" ? "Sign in" : "Create account"}</Button>
         {mode === "in" && <Button type="button" variant="link" className="w-full" disabled={busy} onClick={async () => {
           if (!email) { toast.error("Enter your login email first."); return; }
           setBusy(true);
-          const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + "/reset-password" });
-          setBusy(false);
-          if (error) toast.error(error.message); else toast.success("If an account exists, a password reset link has been sent.");
+          try {
+            const result = await requestPasswordReset(email);
+            if (result.dev_token) {
+              toast.success("Password reset link: " + window.location.origin + "/reset-password?token=" + result.dev_token);
+            } else {
+              toast.success(result.message ?? "If an account exists, a password reset link has been sent.");
+            }
+          } catch (err) {
+            toast.error((err as Error).message);
+          } finally {
+            setBusy(false);
+          }
         }}>Forgot password?</Button>}
         <Button type="button" variant="link" className="w-full text-sm text-muted-foreground" onClick={() => setMode(mode === "in" ? "up" : "in")}>
           {mode === "in" ? "New here? Create an account" : "Already have an account? Sign in"}
         </Button>
         {mode === "up" && (
-          <p className="text-xs text-muted-foreground">The first person to sign up becomes the flat admin. If the admin added you with your email, your account links automatically.</p>
+          <p className="text-xs text-muted-foreground">Password: at least 8 characters. The first person to sign up becomes the flat admin. If the admin added you with your email, your account links automatically.</p>
         )}
       </form>
     </div>

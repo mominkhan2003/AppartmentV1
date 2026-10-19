@@ -22,12 +22,9 @@ import {
   useMe,
   useRefresh,
   nameOf,
-  uploadFile,
   openFile,
 } from "@/lib/flat";
-import { rpc, checked, pageHead } from "@/lib/flat-actions";
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import { saveChore, completeChore, reportChoreNeeded, choreAdminAction, pageHead } from "@/lib/flat-actions";
 export const Route = createFileRoute("/_authenticated/cleaning")({
   head: () =>
     pageHead(
@@ -70,41 +67,7 @@ function Cleaning() {
         const current = text(d, "assigned") || members[0] || null;
         if (current && !members.includes(current))
           throw new Error("The assigned resident must belong to the rotation");
-        const values = {
-          name: text(d, "name"),
-          kind: text(d, "kind") as Database["public"]["Enums"]["chore_kind"],
-          space_id: text(d, "space") || null,
-          frequency_days: Number(text(d, "frequency")),
-          next_due: text(d, "due"),
-          rotates: d.get("rotates") === "on",
-          active: d.get("active") === "on",
-          current_resident_id: current,
-        };
-        let id = c?.id;
-        if (c) {
-          await checked(supabase.from("chores").update(values).eq("id", c.id));
-        } else {
-          const { data, error } = await supabase
-            .from("chores")
-            .insert(values)
-            .select("id")
-            .single();
-          if (error) throw error;
-          id = data.id;
-        }
-        if (!id) throw new Error("Duty was not saved");
-        const retained = id;
-        await checked(
-          supabase.from("chore_members").upsert(
-            members.map((resident_id, position) => ({ chore_id: retained, resident_id, position })),
-            { onConflict: "chore_id,resident_id" },
-          ),
-        );
-        const removed = c?.members.filter((r) => !members.includes(r)) ?? [];
-        if (removed.length)
-          await checked(
-            supabase.from("chore_members").delete().eq("chore_id", id).in("resident_id", removed),
-          );
+        await saveChore(d, { choreId: c?.id, members });
         await refresh();
       }}
     >
@@ -239,11 +202,7 @@ function Cleaning() {
                       }
                       onSave={async (d) => {
                         const file = upload(d);
-                        await rpc("complete_chore", {
-                          _chore_id: c.id,
-                          _note: text(d, "notes"),
-                          _photo_path: file ? await uploadFile("photos", file) : null,
-                        });
+                        await completeChore(c.id, d, file);
                         await refresh();
                       }}
                     >
@@ -259,7 +218,7 @@ function Cleaning() {
                     </Button>
                   }
                   onSave={async (d) => {
-                    await rpc("report_chore_needed", { _chore_id: c.id, _note: text(d, "notes") });
+                    await reportChoreNeeded(c.id, text(d, "notes"));
                     await refresh();
                   }}
                 >
@@ -274,12 +233,12 @@ function Cleaning() {
                       </Button>
                     }
                     onSave={async (d) => {
-                      await rpc("admin_chore_action", {
-                        _chore_id: c.id,
-                        _action: text(d, "action") as "skip" | "reset" | "reassign",
-                        _target: text(d, "target") || null,
-                        _reason: text(d, "notes"),
-                      });
+                      await choreAdminAction(
+                        c.id,
+                        text(d, "action") as "skip" | "reset" | "reassign",
+                        text(d, "target") || null,
+                        text(d, "notes"),
+                      );
                       await refresh();
                     }}
                   >
@@ -324,12 +283,12 @@ function Cleaning() {
                   {e.reason ? " · " + e.reason : ""}
                 </p>
               </div>
-              {e.photo_path && (
+              {e.photo_media_id && (
                 <Button
                   variant="outline"
                   size="icon"
                   aria-label="View completion photo"
-                  onClick={() => openFile("photos", e.photo_path ?? "")}
+                  onClick={() => openFile("photos", e.photo_media_id ?? "")}
                 >
                   <Image />
                 </Button>

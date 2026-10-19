@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Check, Undo2, Trash2, ExternalLink, Search, ArrowRight, Phone, Mail, Clock, MapPin, CheckCheck, Pencil } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Editor, TextField, Notes, Choice, DataState, Status, text } from "@/components/flat/Forms";
 import { PageHeader, run } from "@/components/flat/Page";
 import { useMe, useResidents } from "@/lib/flat";
-import { checked, rpc } from "@/lib/flat-actions";
+import { hubItems, hubResponses, hubInsert, hubEdit, hubDelete, hubRespond, hubSetStatus } from "@/lib/flat-actions";
 import { hubPages, valueOf, pollOptions, safeDocumentUrl, formPayload, type HubKind, type HubItem, type HubResponse } from "@/lib/hub";
 
 export function HubPage({ kind }: { kind: HubKind }) {
@@ -18,16 +17,8 @@ export function HubPage({ kind }: { kind: HubKind }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("open");
   const [busy, setBusy] = useState<string | null>(null);
-  const query = useQuery({ queryKey: ["hub", kind], queryFn: async () => {
-    const { data, error } = await supabase.from("hub_items").select("*").eq("kind", kind).order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return data;
-  }});
-  const responses = useQuery({ queryKey: ["hub-responses", kind], queryFn: async () => {
-    const { data, error } = await supabase.from("hub_responses").select("*, hub_items!inner(kind)").eq("hub_items.kind", kind);
-    if (error) throw new Error(error.message);
-    return data;
-  }});
+  const query = useQuery({ queryKey: ["hub", kind], queryFn: () => hubItems(kind) });
+  const responses = useQuery({ queryKey: ["hub-responses", kind], queryFn: () => hubResponses(kind) });
   async function refresh() { await Promise.all([qc.invalidateQueries({ queryKey: ["hub", kind] }), qc.invalidateQueries({ queryKey: ["hub-responses", kind] })]); }
   async function action(id: string, fn: () => Promise<unknown>, message: string) {
     setBusy(id);
@@ -39,13 +30,13 @@ export function HubPage({ kind }: { kind: HubKind }) {
   if (kind === "events" || kind === "bookings") visible.sort((a, b) => valueOf(a, "start").localeCompare(valueOf(b, "start")));
   const canCreate = !!me && (!config.adminOnly || me.isAdmin);
   const name = (uid: string) => residents.find(r => r.user_id === uid)?.display_name ?? "Household member";
-  const respond = (item: HubItem, value: string) => action(item.id, () => rpc("hub_respond", { _item_id: item.id, _value: value }), value === "release" ? "Returned" : "Response saved");
+  const respond = (item: HubItem, value: string) => action(item.id, () => hubRespond(item.id, value), value === "release" ? "Returned" : "Response saved");
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title={config.title} action={canCreate && <Editor title={`Add ${config.singular}`} trigger={<Button><Plus className="h-4 w-4" />Add {config.singular}</Button>} onSave={async data => {
         const title = text(data, "title");
         if (!title || title.length > 160) throw new Error("Title must be between 1 and 160 characters");
-        await checked(supabase.from("hub_items").insert({ kind, title, details: text(data, "details"), payload: formPayload(kind, data) }));
+        await hubInsert({ kind, title, details: text(data, "details"), payload: formPayload(kind, data) });
         await refresh();
       }}>
         <TextField label={kind === "polls" ? "Question" : "Title"} name="title" required />
@@ -82,7 +73,7 @@ export function HubPage({ kind }: { kind: HubKind }) {
             {(kind === "inventory" || kind === "lost-found") && <div className="mt-4">{itemResponses[0] ? <><p className="mb-2 text-sm">{kind === "inventory" ? "Borrowed" : "Claimed"} by {name(itemResponses[0].user_id)}</p>{(mine || me?.isAdmin) && <Button variant="outline" size="sm" disabled={busy === item.id} onClick={() => respond(item, "release")}><Undo2 className="h-4 w-4" />{kind === "inventory" ? "Return item" : "Release claim"}</Button>}</> : <Button variant="outline" size="sm" disabled={busy === item.id || item.status === "done"} onClick={() => respond(item, "claimed")}><ArrowRight className="h-4 w-4" />{kind === "inventory" ? "Borrow item" : "Claim item"}</Button>}</div>}
             <div className="mt-5 flex flex-wrap items-center gap-2 border-t pt-3">
               {owner && <Editor title={`Edit ${config.singular}`} trigger={<Button size="icon" variant="ghost" aria-label={`Edit ${item.title}`}><Pencil className="h-4 w-4" /></Button>} onSave={async data => {
-                await rpc("hub_edit_item", { _item_id: item.id, _title: text(data, "title"), _details: text(data, "details"), _payload: formPayload(kind, data) });
+                await hubEdit(item.id, { title: text(data, "title"), details: text(data, "details"), payload: formPayload(kind, data) });
                 await refresh();
               }}>
                 <TextField label={kind === "polls" ? "Question" : "Title"} name="title" value={item.title} required />
@@ -91,8 +82,8 @@ export function HubPage({ kind }: { kind: HubKind }) {
                 {kind === "polls" && <Notes label="Options (one per line)" name="options" value={pollOptions(item).join("\n")} required />}
                 {kind === "lost-found" && <Choice label="Report type" name="reportType" value={valueOf(item, "reportType") || "found"} options={[{ id: "lost", name: "Lost" }, { id: "found", name: "Found" }]} />}
               </Editor>}
-              {(owner || kind === "shopping") && <Button size="sm" variant="ghost" disabled={busy === item.id} onClick={() => action(item.id, () => rpc("hub_set_status", { _item_id: item.id, _status: item.status === "open" ? "done" : "open" }), "Updated")} >{item.status === "done" ? <Undo2 className="h-4 w-4" /> : <Check className="h-4 w-4" />}{item.status === "done" ? "Reopen" : kind === "shopping" ? "Purchased" : "Close"}</Button>}
-              {owner && <Editor title={`Delete ${config.singular}`} destructive trigger={<Button size="icon" variant="ghost" aria-label={`Delete ${item.title}`} className="ml-auto text-destructive"><Trash2 className="h-4 w-4" /></Button>} onSave={async () => { await checked(supabase.from("hub_items").delete().eq("id", item.id)); await refresh(); }}><p className="break-words text-sm">Delete “{item.title}” and all its responses?</p></Editor>}
+              {(owner || kind === "shopping") && <Button size="sm" variant="ghost" disabled={busy === item.id} onClick={() => action(item.id, () => hubSetStatus(item.id, item.status === "open" ? "done" : "open"), "Updated")} >{item.status === "done" ? <Undo2 className="h-4 w-4" /> : <Check className="h-4 w-4" />}{item.status === "done" ? "Reopen" : kind === "shopping" ? "Purchased" : "Close"}</Button>}
+              {owner && <Editor title={`Delete ${config.singular}`} destructive trigger={<Button size="icon" variant="ghost" aria-label={`Delete ${item.title}`} className="ml-auto text-destructive"><Trash2 className="h-4 w-4" /></Button>} onSave={async () => { await hubDelete(item.id); await refresh(); }}><p className="break-words text-sm">Delete “{item.title}” and all its responses?</p></Editor>}
             </div>
           </article>;
         })}

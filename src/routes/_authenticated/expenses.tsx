@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Plus, FileText, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Empty } from "@/components/flat/Page";
@@ -16,20 +15,19 @@ import {
   upload,
   Field,
 } from "@/components/flat/Forms";
+import { uploadFile, fileHash } from "@/lib/flat";
 import {
   eur,
   toCents,
   useExpenses,
+  useExpenseShares,
   useResidents,
   useGroups,
   useMe,
   useRefresh,
-  uploadFile,
-  fileHash,
   openFile,
 } from "@/lib/flat";
-import { rpc, checked, pageHead } from "@/lib/flat-actions";
-import { supabase } from "@/integrations/supabase/client";
+import { recordSharedExpense, submitClaim, reviewClaim, voidExpense, pageHead } from "@/lib/flat-actions";
 export const Route = createFileRoute("/_authenticated/expenses")({
   head: () =>
     pageHead("Expenses", "Shared costs, receipts, reimbursement claims and approval history."),
@@ -44,14 +42,7 @@ function Expenses() {
   const [filter, setFilter] = useState("all");
   const [group, setGroup] = useState("");
   const [custom, setCustom] = useState(false);
-  const shares = useQuery({
-    queryKey: ["expense_shares"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("expense_shares").select("*");
-      if (error) throw error;
-      return data;
-    },
-  });
+  const shares = useExpenseShares();
   const participants = residents.filter(
     (r) => r.active && (!group || groups.find((g) => g.id === group)?.members.includes(r.id)),
   );
@@ -69,51 +60,36 @@ function Expenses() {
         const amount = toCents(text(d, "amount"));
         if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a positive amount");
         const file = upload(d);
-        const receipt_path = file ? await uploadFile("receipts", file) : null;
+        const receipt_media_id = file ? await uploadFile("receipts", file) : null;
         const receipt_hash = file ? await fileHash(file) : null;
         const title = text(d, "title");
         if (title.length > 120) throw new Error("Keep the title within 120 characters");
         if (shared) {
-          const selected = d.getAll("participants").map(String);
+          const selected = d.getAll("participants[]").map(String);
           const customShares = custom
             ? Object.fromEntries(selected.map((id) => [id, toCents(text(d, "share_" + id))]))
             : null;
           if (customShares && Object.values(customShares).reduce((a, b) => a + b, 0) !== amount)
             throw new Error("Custom shares must add up to the expense total");
-          await rpc("record_shared_expense", {
-            _title: title,
-            _description: text(d, "description"),
-            _category: text(d, "category"),
-            _amount_cents: amount,
-            _expense_date: text(d, "date"),
-            _group_id: group || null,
-            _participants: selected,
-            _custom: customShares,
-            _receipt_path: receipt_path,
-            _receipt_hash: receipt_hash,
-            _notes: text(d, "notes"),
-            _items: null,
+          await recordSharedExpense(d, {
+            title,
+            amountCents: amount,
+            participants: selected,
+            customShares,
+            group: group,
+            receiptId: receipt_media_id,
+            receiptHash: receipt_hash,
           });
         } else {
           if (!me?.resident) throw new Error("Your resident account is not linked");
-          await checked(
-            supabase
-              .from("expenses")
-              .insert({
-                kind: "claim",
-                status: "pending",
-                title,
-                amount_cents: amount,
-                expense_date: text(d, "date"),
-                category: text(d, "category"),
-                description: text(d, "description"),
-                notes: text(d, "notes"),
-                receipt_path,
-                receipt_hash,
-                payer_resident_id: me.resident.id,
-                group_id: text(d, "group") || null,
-              }),
-          );
+          await submitClaim(d, {
+            title,
+            amountCents: amount,
+            group: text(d, "group") || "",
+            payerResidentId: me.resident.id,
+            receiptId: receipt_media_id,
+            receiptHash: receipt_hash,
+          });
         }
         await refresh();
       }}
@@ -164,7 +140,7 @@ function Expenses() {
             {participants.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3">
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name="participants" value={r.id} defaultChecked />
+                  <input type="checkbox" name="participants[]" value={r.id} defaultChecked />
                   {r.display_name}
                 </label>
                 {custom && (
@@ -256,11 +232,11 @@ function Expenses() {
             </div>
             {e.review_note && <p className="mt-2 text-sm break-words">Review: {e.review_note}</p>}
             <div className="mt-3 flex flex-wrap gap-2">
-              {e.receipt_path && (
+              {e.receipt_media_id && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => openFile("receipts", e.receipt_path ?? "")}
+                  onClick={() => openFile("receipts", e.receipt_media_id ?? "")}
                 >
                   <FileText />
                   Receipt
@@ -280,11 +256,7 @@ function Expenses() {
                       </Button>
                     }
                     onSave={async (d) => {
-                      await rpc("review_claim", {
-                        _expense_id: e.id,
-                        _approve: approve,
-                        _note: text(d, "notes"),
-                      });
+                      await reviewClaim(e.id, approve, text(d, "notes"));
                       await refresh();
                     }}
                   >
@@ -301,7 +273,7 @@ function Expenses() {
                     </Button>
                   }
                   onSave={async (d) => {
-                    await rpc("void_expense", { _expense_id: e.id, _reason: text(d, "notes") });
+                    await voidExpense(e.id, text(d, "notes"));
                     await refresh();
                   }}
                 >

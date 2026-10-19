@@ -12,8 +12,7 @@ import {
   useWashroomAccess,
   type Resident,
 } from "@/lib/flat";
-import { checked, pageHead } from "@/lib/flat-actions";
-import { supabase } from "@/integrations/supabase/client";
+import { createResident, updateResident, pageHead } from "@/lib/flat-actions";
 export const Route = createFileRoute("/_authenticated/residents")({
   head: () =>
     pageHead("Residents", "Residents, room assignments, contact details and household groups."),
@@ -56,15 +55,11 @@ function Residents() {
                 email: text(d, "email") || null,
                 room_id: text(d, "room") || null,
                 active: d.get("active") === "on",
-                is_sample: false,
               }
             : {}),
         };
-        await checked(
-          r
-            ? supabase.from("residents").update(values).eq("id", r.id)
-            : supabase.from("residents").insert(values),
-        );
+        if (r) await updateResident(r.id, values);
+        else await createResident(values);
         await refresh();
       }}
     >
