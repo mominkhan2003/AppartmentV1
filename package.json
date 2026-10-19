@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "deploy:namecheap": "npm run build && node scripts/prepare-namecheap-deploy.mjs",
     "build:dev": "vite build --mode development",
-    "preview": "vite preview",
+    "preview": "vite preview --config vite.static-preview.config.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",

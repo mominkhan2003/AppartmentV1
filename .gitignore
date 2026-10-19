@@ -26,6 +26,7 @@ dist-ssr
 !.env.example
 backend/config/database.php
 backend/uploads/
+namecheap-deploy/
 
 # Editor directories and files
 .vscode/*
