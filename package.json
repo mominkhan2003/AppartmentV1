@@ -7,6 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "deploy:namecheap": "npm run build && node scripts/prepare-namecheap-deploy.mjs",
+    "package:namecheap": "npm run deploy:namecheap && node scripts/package-namecheap.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview --config vite.static-preview.config.ts",
     "lint": "eslint .",

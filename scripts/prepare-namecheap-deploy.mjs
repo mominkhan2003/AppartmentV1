@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +21,10 @@ await cp(publicDir, deployDir, { recursive: true });
 await cp(path.join(projectRoot, "backend", "api"), path.join(deployDir, "api"), {
   recursive: true,
 });
+await cp(
+  path.join(projectRoot, "backend", "config", "locate.php"),
+  path.join(deployDir, "config", "locate.php"),
+);
 await cp(path.join(projectRoot, "backend", "src"), path.join(deployDir, "src"), {
   recursive: true,
 });
@@ -39,6 +43,14 @@ await cp(
   path.join(projectRoot, "backend", "bin", "create-admin.php"),
   path.join(deployDir, "bin", "create-admin.php"),
 );
+await cp(
+  path.join(projectRoot, "backend", "bin", "diagnose.php"),
+  path.join(deployDir, "bin", "diagnose.php"),
+);
+await cp(
+  path.join(projectRoot, "database", "schema.sql"),
+  path.join(deployDir, "database", "schema.sql"),
+);
 
 const uploadsDir = path.join(deployDir, "uploads");
 await mkdir(uploadsDir, { recursive: true });
@@ -55,5 +67,38 @@ if (appConfigDir) {
   htaccess = `SetEnv APP_CONFIG_DIR "${appConfigDir}"\n\n${htaccess}`;
 }
 await writeFile(path.join(deployDir, ".htaccess"), htaccess, "utf8");
+
+async function assertNoPrivateFiles(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await assertNoPrivateFiles(entryPath);
+      continue;
+    }
+    if (entry.name === "database.php" || /^\.env(?:\.|$)/i.test(entry.name)) {
+      throw new Error(`Refusing to package private configuration file: ${entryPath}`);
+    }
+  }
+}
+
+for (const relativePath of [
+  "index.html",
+  ".htaccess",
+  "api/index.php",
+  "config/bootstrap.php",
+  "config/locate.php",
+  "config/database.example.php",
+  "bin/diagnose.php",
+  "database/schema.sql",
+]) {
+  try {
+    await readFile(path.join(deployDir, relativePath));
+  } catch (error) {
+    throw new Error(`Namecheap package is missing required file: ${relativePath}`, {
+      cause: error,
+    });
+  }
+}
+await assertNoPrivateFiles(deployDir);
 
 console.log(`Namecheap deployment package prepared at ${deployDir}`);

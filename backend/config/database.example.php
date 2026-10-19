@@ -2,9 +2,9 @@
 declare(strict_types=1);
 
 /**
- * Safe configuration template.
- * Copy this file to config/database.php (keep it OUTSIDE public_html on cPanel) and fill in the
- * credentials you created in cPanel → "MySQL Databases". The database.php file is git-ignored.
+ * Safe configuration template. Copy to ~/flatmate-config/database.php (outside public_html)
+ * and fill in the credentials you created in cPanel → "MySQL Databases".
+ * Never commit or upload the completed database.php file.
  */
 
 return [

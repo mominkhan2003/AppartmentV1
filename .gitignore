@@ -28,6 +28,8 @@ backend/config/database.php
 backend/uploads/
 namecheap-deploy/
 Namecheap-Upload.zip
+/Dist.zip
+/namecheap-deploy.zip
 
 # Editor directories and files
 .vscode/*
