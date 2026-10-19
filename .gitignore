@@ -27,6 +27,7 @@ dist-ssr
 backend/config/database.php
 backend/uploads/
 namecheap-deploy/
+Namecheap-Upload.zip
 
 # Editor directories and files
 .vscode/*

@@ -32,6 +32,10 @@ await cp(
   path.join(configDir, "bootstrap.php"),
 );
 await cp(
+  path.join(projectRoot, "backend", "config", "database.example.php"),
+  path.join(configDir, "database.example.php"),
+);
+await cp(
   path.join(projectRoot, "backend", "bin", "create-admin.php"),
   path.join(deployDir, "bin", "create-admin.php"),
 );

@@ -31,8 +31,16 @@ Upload the **contents** of `namecheap-deploy/` to the domain's document root (us
 ### Initial setup
 
 1. In cPanel, create a MySQL database and user, assign the user all required privileges, and import `database/schema.sql` through phpMyAdmin.
-2. Copy `backend/config/database.example.php` to a private `database.php`, fill in the cPanel database values, and keep that file outside `public_html` (for example, `/home/CPANEL_USER/flatmate-config/database.php`).
-3. In GitHub, add the repository variable `NAMECHEAP_APP_CONFIG_DIR` with the absolute directory containing that file. The deploy build puts this path into `.htaccess` for PHP. If you are uploading manually, add `SetEnv APP_CONFIG_DIR "/home/CPANEL_USER/flatmate-config"` to the deployed `.htaccess`.
+2. Create a private directory outside `public_html` and copy the safe example config there:
+
+   ```sh
+   mkdir -p ~/flatmate-config
+   cp ~/public_html/config/database.example.php ~/flatmate-config/database.php
+   ```
+
+   Edit `~/flatmate-config/database.php` with the cPanel database values. The API automatically checks this standard cPanel location. If your private directory has another path, set `APP_CONFIG_DIR` to that directory.
+
+3. No `APP_CONFIG_DIR` variable is required when using `~/flatmate-config`. For a custom path, add the repository variable `NAMECHEAP_APP_CONFIG_DIR` in GitHub Actions, or set `SetEnv APP_CONFIG_DIR "/home/CPANEL_USER/your-private-config"` in the deployed `.htaccess`.
 4. In cPanel Terminal, create the first admin account (use the real email and a strong password):
 
    ```sh

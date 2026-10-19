@@ -11,17 +11,22 @@ declare(strict_types=1);
  */
 
 // Location priority:
-//  1. Environment variable APP_CONFIG_DIR (set via cPanel "SetEnv" in httpd.conf, FPM pool option or .htaccess)
-//  2. A config/ directory next to the backend package (repository default; git-ignored)
+//  1. Environment variable APP_CONFIG_DIR
+//  2. A private flatmate-config directory beside the cPanel document root
+//  3. A config/ directory next to the backend package (local development)
 if ($__configDir = getenv('APP_CONFIG_DIR')) {
     $__configDir = rtrim($__configDir, '/\\');
 } else {
-    $__configDir = __DIR__;
+    $__documentRoot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
+    $__privateConfigDir = $__documentRoot !== '' ? dirname($__documentRoot) . '/flatmate-config' : '';
+    $__configDir = $__privateConfigDir !== '' && is_file($__privateConfigDir . '/database.php')
+        ? $__privateConfigDir
+        : __DIR__;
 }
 
 if (!is_file($__configDir . '/database.php')) {
     http_response_code(500);
-    echo json_encode(['error' => 'Database configuration is missing. Copy backend/config/database.example.php to a private directory and set APP_CONFIG_DIR.']);
+    echo json_encode(['error' => 'Database configuration is missing. Copy config/database.example.php to ~/flatmate-config/database.php and enter your cPanel database credentials, or set APP_CONFIG_DIR.']);
     exit;
 }
 
