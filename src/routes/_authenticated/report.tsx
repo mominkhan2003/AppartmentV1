@@ -1,14 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Download, FileText, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Download, FileText, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Empty } from "@/components/flat/Page";
-import { DataState } from "@/components/flat/Forms";
-import { pageHead } from "@/lib/flat-actions";
+import { Editor, TextField, Notes, DataState, text } from "@/components/flat/Forms";
+import { pageHead, startContributionRound } from "@/lib/flat-actions";
 import { downloadFinancialReport } from "@/lib/pdf-report";
-import { budgetCall } from "@/lib/budget-call";
-import { eur, useFinancialReport } from "@/lib/flat";
+import { budgetCallMessage } from "@/lib/budget-call";
+import { eur, toCents, useFinancialReport, useMe, useRefresh } from "@/lib/flat";
 
 export const Route = createFileRoute("/_authenticated/report")({
   head: () =>
@@ -22,8 +22,11 @@ export const Route = createFileRoute("/_authenticated/report")({
 function ReportPage() {
   const query = useFinancialReport();
   const report = query.data;
-  const call = report ? budgetCall(report) : null;
+  const { data: me } = useMe();
   const [downloading, setDownloading] = useState(false);
+  const latestRound = report?.rounds.length ? report.rounds[report.rounds.length - 1] : null;
+  const nextRoundNo =
+    (report?.rounds ?? []).reduce((max, round) => Math.max(max, round.round_no), 0) + 1;
 
   async function download() {
     if (!report) return;
@@ -83,7 +86,9 @@ function ReportPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-semibold">Member contribution status</h2>
               <span className="rounded-full bg-[#eff6ff] px-3 py-1 text-xs font-semibold text-[#2563eb]">
-                Round 5 · €10.00 / member
+                {latestRound
+                  ? `${latestRound.label} · ${eur(latestRound.target_per_member_cents)} / member`
+                  : "No rounds yet"}
               </span>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -132,7 +137,12 @@ function ReportPage() {
           </section>
 
           <section className="rounded-2xl border bg-card p-5">
-            <h2 className="text-lg font-semibold">Contribution rounds</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold">Contribution rounds</h2>
+              {me?.isAdmin && (
+                <StartRound nextNo={nextRoundNo} amountCents={report.next_budget_cents} />
+              )}
+            </div>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead>
@@ -242,17 +252,66 @@ function ReportPage() {
               <FileText className="h-4 w-4" />
               Next step budget call
             </p>
-            <p className="mt-2 text-sm text-[#78350f]">
-              Collect {eur(report.next_budget_cents)} from each of the {call?.settledCount ?? 0}{" "}
-              settled members and {eur(call?.pendingCents ?? 0)} from{" "}
-              {call?.pendingCount === 1 ? "the pending member" : "the pending members"}. This yields{" "}
-              {eur(call?.collectionCents ?? 0)}, leaving a clean positive balance of{" "}
-              {eur(call?.projectedBalanceCents ?? 0)} for upcoming expenses.
-            </p>
+            <p className="mt-2 text-sm text-[#78350f]">{budgetCallMessage(report, eur)}</p>
+            {me?.isAdmin && (
+              <p className="mt-2 text-xs text-[#92400e]">
+                Start the next round above. Unpaid amounts from earlier rounds stay open and are added
+                to each member's total outstanding automatically.
+              </p>
+            )}
           </section>
         </div>
       )}
     </div>
+  );
+}
+
+function StartRound({ nextNo, amountCents }: { nextNo: number; amountCents: number }) {
+  const refresh = useRefresh();
+  const label = `Round ${nextNo}`;
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return (
+    <Editor
+      title={`Start ${label}`}
+      trigger={
+        <Button className="bg-[#2563eb] text-white hover:bg-blue-500">
+          <Plus className="h-4 w-4" />
+          Start {label}
+        </Button>
+      }
+      successMessage={`${label} started — members notified.`}
+      onSave={async (data) => {
+        const amount = toCents(text(data, "amount"));
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error("Enter a positive amount per member");
+        }
+        const collectedOn = text(data, "date");
+        await startContributionRound({
+          amount_cents: amount,
+          label: text(data, "label") || label,
+          ...(collectedOn ? { collected_on: collectedOn } : {}),
+          note: text(data, "note") || null,
+        });
+        await refresh();
+      }}
+    >
+      <TextField label="Round label" name="label" value={label} required />
+      <TextField
+        label="Amount per member (EUR)"
+        name="amount"
+        type="number"
+        value={amountCents / 100}
+        required
+      />
+      <TextField label="Collection date" name="date" type="date" value={today} required />
+      <Notes label="Note (optional)" name="note" />
+      <p className="text-xs text-muted-foreground">
+        Every active member gets this round's due. Unpaid balances from earlier rounds stay open, so
+        each member's total outstanding is the sum of all pending rounds — for example, €11.00 carried
+        forward plus a new €10.00 due shows as €21.00.
+      </p>
+    </Editor>
   );
 }
 

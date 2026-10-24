@@ -25,3 +25,30 @@ export function budgetCall(
     projectedBalanceCents: collectionCents + report.pool.pool_balance_cents,
   };
 }
+
+/**
+ * Human-readable version of the next-step call. Before a round starts, settled
+ * members pay the next target while pending members clear their outstanding.
+ * Once a round is running and nobody is settled, the call is simply the total
+ * outstanding amount.
+ */
+export function budgetCallMessage(
+  report: Pick<FinancialReport, "member_status" | "next_budget_cents" | "pool">,
+  money: (cents: number) => string,
+): string {
+  const call = budgetCall(report);
+  if (call.settledCount > 0) {
+    return (
+      `Collect ${money(report.next_budget_cents)} from each of the ${call.settledCount} settled members and ` +
+      `${money(call.pendingCents)} from ${call.pendingCount === 1 ? "the pending member" : "the pending members"}. ` +
+      `This yields ${money(call.collectionCents)}, leaving a clean positive balance of ` +
+      `${money(call.projectedBalanceCents)} for upcoming expenses.`
+    );
+  }
+  return (
+    `Collect ${money(call.collectionCents)} in outstanding round dues from the ` +
+    `${call.pendingCount === 1 ? "pending member" : `${call.pendingCount} pending members`}. ` +
+    `This yields ${money(call.collectionCents)}, leaving a clean positive balance of ` +
+    `${money(call.projectedBalanceCents)} for upcoming expenses.`
+  );
+}

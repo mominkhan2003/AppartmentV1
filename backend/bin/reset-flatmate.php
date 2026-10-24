@@ -44,6 +44,9 @@ function flatmateResetApplySchema(PDO $pdo): void
     if (!flatmateResetIndexExists($pdo, 'app_users', 'uq_app_users_username')) {
         $pdo->exec('ALTER TABLE app_users ADD UNIQUE KEY uq_app_users_username (username)');
     }
+    if (!flatmateResetColumnExists($pdo, 'residents', 'can_view_finance')) {
+        $pdo->exec('ALTER TABLE residents ADD COLUMN can_view_finance TINYINT(1) NOT NULL DEFAULT 1 AFTER active');
+    }
     if (!flatmateResetColumnExists($pdo, 'expenses', 'funding_source')) {
         $pdo->exec("ALTER TABLE expenses ADD COLUMN funding_source ENUM('pool','direct') NOT NULL DEFAULT 'pool' AFTER kind");
     }
@@ -199,8 +202,10 @@ function flatmateResetRun(string $secret, string $expectedSecret): array
             ['s0000000-0000-4000-8000-000000000003', 'R3', 'Room 3', 'bedroom', '[[482,130],[580,130],[580,245],[482,245]]', 1, 3],
             ['s0000000-0000-4000-8000-000000000004', 'R4', 'Room 4', 'bedroom', '[[482,245],[590,245],[590,335],[482,335]]', 1, 4],
             ['s0000000-0000-4000-8000-000000000005', 'R5', 'Room 5', 'bedroom', '[[482,335],[595,335],[595,440],[482,440]]', 1, 5],
+            ['s0000000-0000-4000-8000-00000000000c', 'R6', 'Room 6', 'bedroom', '[[488,440],[612,440],[612,525],[488,525]]', 2, 6],
             ['s0000000-0000-4000-8000-000000000006', 'K', 'Kitchen', 'kitchen', '[[220,112],[390,112],[390,150],[220,150]]', 0, 7],
             ['s0000000-0000-4000-8000-000000000007', 'H', 'Hall', 'hall', '[[218,150],[390,150],[390,78],[482,78],[482,475],[418,475],[418,350],[218,350]]', 0, 8],
+            ['s0000000-0000-4000-8000-00000000000d', 'S', 'Store Room', 'storage', '[[390,52],[482,52],[482,78],[390,78]]', 0, 9],
             ['s0000000-0000-4000-8000-000000000008', 'BAL', 'Balcony', 'balcony', '[[80,105],[218,105],[218,350],[80,350]]', 0, 10],
             ['s0000000-0000-4000-8000-000000000009', 'W', 'Toilet (W)', 'washroom', '[[338,350],[418,350],[418,410],[338,410]]', 0, 11],
             ['s0000000-0000-4000-8000-00000000000a', 'BA', 'Bathroom (B)', 'washroom', '[[330,410],[418,410],[418,475],[330,475]]', 0, 12],

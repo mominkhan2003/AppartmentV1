@@ -48,7 +48,9 @@ function Dashboard() {
   const myOutstanding = myMember?.outstanding_cents ?? 0;
   const pending = members.filter((m) => m.status === "pending");
   const settled = members.filter((m) => m.status === "settled");
-  const pendingMember = pending[0];
+  const pendingOutstanding = pending.reduce((sum, member) => sum + member.outstanding_cents, 0);
+  const pendingMember = [...pending].sort((a, b) => b.outstanding_cents - a.outstanding_cents)[0];
+  const latestRound = finance?.rounds.length ? finance.rounds[finance.rounds.length - 1] : null;
 
   async function downloadReport() {
     setDownloading(true);
@@ -133,7 +135,14 @@ function Dashboard() {
           <div>
             <h2 className="text-lg font-semibold">Member contribution status</h2>
             <p className="text-sm text-muted-foreground">
-              Round 5 · €10.00 per member · Asif Bhai pending €11.00
+              {latestRound
+                ? `${latestRound.label} · ${eur(latestRound.target_per_member_cents)} per member`
+                : "Contribution rounds"}
+              {pending.length === 0
+                ? " · all settled"
+                : pending.length === 1 && pendingMember
+                  ? ` · ${pendingMember.display_name} pending ${eur(pendingMember.outstanding_cents)}`
+                  : ` · ${pending.length} members pending ${eur(pendingOutstanding)}`}
             </p>
           </div>
           <span className="rounded-full bg-[#eff6ff] px-3 py-1 text-xs font-semibold text-[#2563eb]">
@@ -163,7 +172,7 @@ function Dashboard() {
               <p className="mt-1 text-sm text-[#78350f]">
                 {pendingMember.display_name}:{" "}
                 {pendingMember.status_note ??
-                  `Pending ${eur(pendingMember.outstanding_cents)} contribution for Round 5.`}
+                  `Pending ${eur(pendingMember.outstanding_cents)} contribution.`}
               </p>
               <p className="mt-1 text-xs text-[#92400e]">
                 The amount can be offset directly via upcoming grocery purchases. No cash hand-over is
@@ -186,7 +195,7 @@ function Dashboard() {
         <MiniStat
           label="Next budget call"
           value={`${eur(finance?.next_budget_cents ?? 1000)} / member`}
-          note={`${settled.length} settled members + ${eur(pendingMember?.outstanding_cents ?? 0)} pending`}
+          note={`${settled.length} settled members + ${eur(pendingOutstanding)} pending`}
         />
       </section>
 

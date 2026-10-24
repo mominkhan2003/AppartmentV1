@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { FinancialReport, FinancialReportEntry } from "@/lib/types";
-import { budgetCall } from "@/lib/budget-call";
+import { budgetCallMessage } from "@/lib/budget-call";
 
 const SLATE: [number, number, number] = [30, 41, 59]; // #1e293b
 const BLUE: [number, number, number] = [37, 99, 235]; // #2563eb
@@ -369,7 +369,6 @@ function drawFinalSummary(doc: jsPDF, report: FinancialReport) {
   doc.addPage();
   addContentHeader(doc, "Final audit summary", `${longDate(report.period_start)} – ${longDate(report.period_end)}`);
 
-  const call = budgetCall(report);
   let y = 32;
   const positive = report.pool.pool_balance_cents >= 0;
   doc.setFillColor(...(positive ? GREEN_BG : RED_BG));
@@ -432,10 +431,7 @@ function drawFinalSummary(doc: jsPDF, report: FinancialReport) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.4);
   doc.text(
-    `Collect ${money(report.next_budget_cents)} from each of the ${call.settledCount} settled members and ` +
-      `${money(call.pendingCents)} from ${call.pendingCount === 1 ? "the pending member" : "the pending members"}. ` +
-      `This yields ${money(call.collectionCents)}, leaving a clean positive balance of ` +
-      `${money(call.projectedBalanceCents)} for upcoming expenses.`,
+    budgetCallMessage(report, money),
     MARGIN + 5,
     y + 12,
     { maxWidth: PAGE_W - MARGIN * 2 - 10 },

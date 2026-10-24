@@ -1,8 +1,8 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { logout } from "@/lib/flat-actions";
+import { logout, notifications } from "@/lib/flat-actions";
 import { useMe } from "@/lib/flat";
 import type { MePayload } from "@/lib/types";
 import {
@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { hubPages, hubPaths } from "@/lib/hub";
+import { canViewFinance, isFinancePath } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -41,6 +42,10 @@ export const Route = createFileRoute("/_authenticated")({
     // freshly seeded accounts must set their own password before anything else
     if (me?.force_password_change && !location.pathname.startsWith("/account")) {
       throw redirect({ to: "/account" });
+    }
+    // Limited residents only see household/task pages; never expose a finance URL.
+    if (!canViewFinance(me) && isFinancePath(location.pathname)) {
+      throw redirect({ to: "/cleaning" });
     }
   },
   component: Shell,
@@ -67,13 +72,25 @@ const adminNav = [
 ] as const;
 
 /** The five entries that get a dedicated slot in the mobile bottom bar. */
-const mobileNav = [nav[0], nav[1], nav[2], nav[3], nav[5]] as const;
+const financeMobileNav = [nav[0], nav[1], nav[2], nav[3], nav[5]] as const;
+/** Limited residents get the household/task entries instead. */
+const limitedMobileNav = [nav[5], nav[6], nav[7]] as const;
 
 function Shell() {
   const { data: me, error } = useMe();
+  const canFinance = canViewFinance(me);
+  const visibleNav = canFinance ? nav : nav.filter((n) => !isFinancePath(n.to));
+  const mobileLinks = canFinance ? financeMobileNav : limitedMobileNav;
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [more, setMore] = useState(false);
+  const { data: notificationData } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: notifications,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+  const unread = notificationData?.unread ?? 0;
   async function signOut() {
     await qc.cancelQueries();
     qc.clear();
@@ -90,7 +107,7 @@ function Shell() {
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
       {/* mobile top bar */}
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-sidebar-border bg-sidebar px-3 py-2 text-sidebar-foreground md:hidden">
-        <Link to="/dashboard" className="flex items-center gap-2">
+        <Link to={canFinance ? "/dashboard" : "/cleaning"} className="flex items-center gap-2">
           <Home className="h-5 w-5 text-sidebar-primary" />
           <span className="font-display text-base font-bold">FlatMate Hub</span>
         </Link>
@@ -98,8 +115,13 @@ function Shell() {
           <span className="mr-1 text-xs text-sidebar-foreground/70">
             {me?.resident?.display_name ?? me?.user.email ?? ""}
           </span>
-          <Link to="/notifications" aria-label="Notifications" className="rounded-lg p-2 text-sidebar-foreground/80">
+          <Link to="/notifications" aria-label="Notifications" className="relative rounded-lg p-2 text-sidebar-foreground/80">
             <Bell className="h-5 w-5" />
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#2563eb] px-1 text-[9px] font-bold text-white">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
           </Link>
           <button type="button" onClick={signOut} aria-label="Sign out" className="rounded-lg p-2 text-sidebar-foreground/80">
             <LogOut className="h-5 w-5" />
@@ -114,7 +136,7 @@ function Shell() {
           <span className="font-display text-lg font-bold">FlatMate Hub</span>
         </div>
         <nav className="flex flex-wrap gap-1 md:flex-col">
-          {nav.map((n) => (
+          {visibleNav.map((n) => (
             <Link key={n.to} to={n.to} className={linkCls} activeProps={active}>
               <n.icon className="h-4 w-4" /> {n.label}
             </Link>
@@ -153,9 +175,16 @@ function Shell() {
         )}
         <div className="mt-auto border-t border-sidebar-border pt-4 text-sm">
           <div className="px-2 font-medium">{me?.resident?.display_name ?? me?.user.email ?? ""}</div>
-          <div className="px-2 text-xs text-sidebar-foreground/60">{me?.isAdmin ? "Admin" : "Resident"}</div>
+          <div className="px-2 text-xs text-sidebar-foreground/60">
+            {me?.isAdmin ? "Admin" : canFinance ? "Resident" : "Limited access"}
+          </div>
           <Link to="/notifications" className={linkCls + " mt-3"} activeProps={active}>
             <Bell className="h-4 w-4" /> Notifications
+            {unread > 0 && (
+              <span className="ml-auto rounded-full bg-[#2563eb] px-1.5 py-0.5 text-[10px] font-bold text-white">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
           </Link>
           <Link to="/account" className={linkCls} activeProps={active}>
             <UserRound className="h-4 w-4" /> My account
@@ -244,9 +273,12 @@ function Shell() {
       {/* mobile bottom nav */}
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-sidebar-border bg-sidebar pb-[env(safe-area-inset-bottom)] text-sidebar-foreground md:hidden"
+        className={
+          "fixed inset-x-0 bottom-0 z-40 grid border-t border-sidebar-border bg-sidebar pb-[env(safe-area-inset-bottom)] text-sidebar-foreground md:hidden " +
+          (canFinance ? "grid-cols-6" : "grid-cols-4")
+        }
       >
-        {mobileNav.map((n) => (
+        {mobileLinks.map((n) => (
           <Link key={n.to} to={n.to} className={bottomCls} activeProps={bottomActive}>
             <n.icon className="h-5 w-5" />
             <span className="truncate">{n.label === "Weekly menu" ? "Menu" : n.label}</span>

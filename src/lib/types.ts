@@ -33,6 +33,8 @@ export type Resident = {
   phone: string | null;
   room_id: string | null;
   active: boolean;
+  /** false hides the budget, expenses and audit report from this resident */
+  can_view_finance?: boolean;
   is_sample: boolean;
   created_at: string;
 };
@@ -277,6 +279,8 @@ export type MePayload = {
   approved?: boolean;
   /** true when the account still uses its seeded starting password */
   force_password_change?: boolean;
+  /** false for limited residents who only see household/task pages */
+  can_view_finance?: boolean;
   permissions: string[];
   resident: Resident | null;
 };

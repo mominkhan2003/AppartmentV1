@@ -43,8 +43,11 @@ foreach ($files as $file) {
     $sql = (string) file_get_contents((string) $file);
     // MySQL cannot always run multi-statement through one PDO exec; split on ;\n boundaries.
     foreach (preg_split('/;\s*\n/', $sql) ?: [] as $statement) {
-        $statement = trim($statement);
-        if ($statement === '' || str_starts_with($statement, '--')) {
+        // Strip whole-line SQL comments; a leading "--" must not discard the statement below it.
+        $lines = preg_split('/\R/', (string) $statement) ?: [];
+        $lines = array_filter($lines, fn ($line) => !str_starts_with(ltrim($line), '--'));
+        $statement = trim(implode("\n", $lines));
+        if ($statement === '') {
             continue;
         }
         try {

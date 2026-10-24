@@ -1,5 +1,5 @@
 -- FlatMate Hub — importable initial schema (MySQL 8.0+ / MariaDB compatible).
--- Generated state = migrations 0001 … 0008. Prefer running database/migrations/*.sql in order for an
+-- Generated state = migrations 0001 … 0010. Prefer running database/migrations/*.sql in order for an
 -- upgrade-style import; this file is the same final state in one script for a fresh cPanel database.
 -- See DEPLOYMENT.md for creating the database and importing this file.
 
@@ -59,6 +59,7 @@ CREATE TABLE residents (
   phone        VARCHAR(40)  NULL,
   room_id      CHAR(36)     NULL,
   active       TINYINT(1)   NOT NULL DEFAULT 1,
+  can_view_finance TINYINT(1) NOT NULL DEFAULT 1,
   is_sample    TINYINT(1)   NOT NULL DEFAULT 0,
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

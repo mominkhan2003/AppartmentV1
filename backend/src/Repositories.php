@@ -13,6 +13,10 @@ final class Repositories
         if (Auth::$user === null) {
             Http::error(401, 'Please sign in');
         }
+        $resident = Auth::$resident;
+        if ($resident !== null) {
+            $resident['can_view_finance'] = ((int) ($resident['can_view_finance'] ?? 1)) === 1;
+        }
         return [
             'user' => [
                 'id' => Auth::$user['id'],
@@ -22,8 +26,9 @@ final class Repositories
             'isAdmin' => Auth::$isAdmin,
             'approved' => Auth::$approved,
             'force_password_change' => Auth::$forcePasswordChange,
+            'can_view_finance' => Auth::$canViewFinance,
             'permissions' => Auth::$permissions,
-            'resident' => Auth::$resident,
+            'resident' => $resident,
         ];
     }
 
@@ -86,7 +91,13 @@ final class Repositories
 
     public static function residents(): array
     {
-        return Database::all('SELECT * FROM residents ORDER BY display_name');
+        $rows = Database::all('SELECT * FROM residents ORDER BY display_name');
+        foreach ($rows as &$row) {
+            // Normalise the TINYINT to a JSON boolean so the UI can use strict checks.
+            $row['can_view_finance'] = ((int) ($row['can_view_finance'] ?? 1)) === 1;
+        }
+        unset($row);
+        return $rows;
     }
 
     public static function groupsWithMembers(): array
@@ -116,7 +127,7 @@ final class Repositories
      */
     public static function poolOverview(): array
     {
-        Auth::requireLogin();
+        Auth::requireFinanceAccess();
         $cashContributions = (int) (Database::row(
             "SELECT COALESCE(SUM(amount_cents), 0) AS v FROM ledger_entries WHERE kind = 'payment' AND source = 'cash'"
         )['v'] ?? 0);
@@ -158,12 +169,13 @@ final class Repositories
     /** Dashboard-friendly member status derived from contribution rounds. */
     public static function financeOverview(): array
     {
-        Auth::requireLogin();
+        Auth::requireFinanceAccess();
         $pool = self::poolOverview();
         $members = Database::all(
-            "SELECT r.id, r.display_name, r.active, u.username, u.email,
+            "SELECT r.id, r.display_name, r.active, r.can_view_finance, u.username, u.email,
                     (SELECT COUNT(*) FROM user_roles ur WHERE ur.user_id = u.id AND ur.role = 'admin') AS admin_roles
                FROM residents r LEFT JOIN app_users u ON u.id = r.user_id
+              WHERE r.can_view_finance = 1
               ORDER BY r.display_name"
         );
         $dues = Database::all(
@@ -208,8 +220,18 @@ final class Repositories
             'active_members' => count($active),
             'members' => $members,
             'rounds' => self::contributionRounds(),
-            'next_budget_cents' => 1000,
+            'next_budget_cents' => self::nextBudgetCents(),
         ];
+    }
+
+    /** The latest round target is the best estimate for the next budget call. */
+    private static function nextBudgetCents(): int
+    {
+        $row = Database::row(
+            'SELECT target_per_member_cents FROM contribution_rounds ORDER BY round_no DESC LIMIT 1'
+        );
+        $value = (int) ($row['target_per_member_cents'] ?? 0);
+        return $value > 0 ? $value : 1000;
     }
 
     /** Rounds with their per-member dues, used by the report and dashboard. */
@@ -235,13 +257,14 @@ final class Repositories
      */
     public static function financialReport(): array
     {
-        Auth::requireLogin();
+        Auth::requireFinanceAccess();
         $pool = self::poolOverview();
         $overview = self::financeOverview();
         $members = Database::all(
             "SELECT r.id, r.display_name, r.active, u.username,
                     (SELECT COUNT(*) FROM user_roles ur WHERE ur.user_id = u.id AND ur.role = 'admin') AS admin_roles
                FROM residents r LEFT JOIN app_users u ON u.id = r.user_id
+              WHERE r.can_view_finance = 1
               ORDER BY r.display_name"
         );
         foreach ($members as &$member) {
@@ -335,7 +358,7 @@ final class Repositories
             'rounds' => $overview['rounds'],
             'entries' => $rows,
             'closing_balance_cents' => $running,
-            'next_budget_cents' => 1000,
+            'next_budget_cents' => $overview['next_budget_cents'],
             'pending_contribution_cents' => array_sum(array_map(
                 fn ($m) => (int) $m['outstanding_cents'],
                 $overview['members']
@@ -345,7 +368,7 @@ final class Repositories
 
     public static function residentBalances(): array
     {
-        Auth::requireLogin();
+        Auth::requireFinanceAccess();
         if (Auth::$isAdmin) {
             return Database::all('SELECT * FROM resident_balances ORDER BY resident_id');
         }
@@ -360,7 +383,7 @@ final class Repositories
     /** Authenticated expense list: mirrors RLS "expenses visible" (admin / own / groupless / member-of-group). */
     public static function expensesOverview(): array
     {
-        Auth::requireLogin();
+        Auth::requireFinanceAccess();
         $params = [];
         if (Auth::$isAdmin) {
             $where = '';
@@ -390,7 +413,7 @@ final class Repositories
     /** Authenticated share listing: mirrors the "shares visible" policy in one clean statement. */
     public static function expenseShares(): array
     {
-        Auth::requireLogin();
+        Auth::requireFinanceAccess();
         if (Auth::$isAdmin) {
             return Database::all('SELECT * FROM expense_shares');
         }
@@ -408,7 +431,7 @@ final class Repositories
 
     public static function ledger(string $residentId): array
     {
-        Auth::requireLogin();
+        Auth::requireFinanceAccess();
         if (!Auth::$isAdmin && $residentId !== Auth::myResidentId()) {
             throw new ApiError(403, 'You can only view your own ledger');
         }
@@ -519,6 +542,11 @@ final class Repositories
         if (Auth::$isAdmin) {
             $visible .= ' OR n.audience = \'admin\'';
         }
+        $visible = '(' . $visible . ')';
+        if (!Auth::$canViewFinance) {
+            // Old money alerts stay in the database for full-access accounts but are not shown here.
+            $visible .= " AND n.type <> 'contribution_round'";
+        }
         $rows = Database::all(
             "SELECT n.*, nr.read_at FROM notifications n
               LEFT JOIN notification_reads nr ON nr.notification_id = n.id AND nr.user_id = ?
@@ -538,6 +566,10 @@ final class Repositories
         $params = [$uid, $uid];
         if (Auth::$isAdmin) {
             $visible .= " OR n.audience = 'admin'";
+        }
+        $visible = '(' . $visible . ')';
+        if (!Auth::$canViewFinance) {
+            $visible .= " AND n.type <> 'contribution_round'";
         }
         $row = Database::row(
             "SELECT COUNT(*) AS un FROM notifications n

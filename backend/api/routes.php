@@ -101,6 +101,9 @@ final class Routes
         $add('GET', '/financial-report', function (): void {
             Http::json(200, Repositories::financialReport());
         });
+        $add('POST', '/finance/rounds', function (): void {
+            Http::json(200, Services::startContributionRound(Http::body()));
+        });
         $add('GET', '/ledger/:id', function (array $p): void {
             Http::json(200, Repositories::ledger((string) $p['id']));
         });
@@ -156,7 +159,7 @@ final class Routes
         });
         $add('PUT', '/washroom-access/bulk', function (): void {
             $body = Http::body();
-            $bedroomId = Req::uuid($body, 'bedroom_id', true);
+            $bedroomId = Req::spaceId($body, 'bedroom_id', true);
             $ids = array_values(array_filter(array_map(
                 fn ($v) => trim((string) $v),
                 is_array($body['washroom_ids'] ?? null) ? (array) $body['washroom_ids'] : []

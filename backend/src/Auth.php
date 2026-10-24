@@ -23,6 +23,7 @@ final class Auth
     public static bool $approved = true;    // admin-verified accounts only receive portal access
     public static bool $forcePasswordChange = false; // seeded accounts must set their own password first
     public static array $permissions = [];  // delegated portal permissions
+    public static bool $canViewFinance = false; // limited residents see only household/task pages
     private static ?string $lastResetToken = null;
 
     /** Debug-only helper: raw token of the most recent reset, never used in production mode. */
@@ -59,6 +60,10 @@ final class Auth
         self::$isAdmin = (bool) Database::row("SELECT 1 AS ok FROM user_roles WHERE user_id = ? AND role = 'admin'", [$row['id']]);
         self::$permissions = self::portalPermissions($row['id']);
         self::$resident = Database::row('SELECT * FROM residents WHERE user_id = ? LIMIT 1', [$row['id']]);
+        // The budget belongs to financial household members. Administrators always see it;
+        // an account with no resident profile (e.g. after removal) is treated as limited.
+        self::$canViewFinance = self::$isAdmin
+            || (self::$resident !== null && (int) (self::$resident['can_view_finance'] ?? 1) === 1);
     }
 
     /** SECURITY DEFINER equivalents: is_admin() and portal_permissions(). */
@@ -103,6 +108,15 @@ final class Auth
     {
         if (!self::can($permission)) {
             throw new ApiError(403, 'Not allowed: ' . $permission);
+        }
+    }
+
+    /** Financial pages are hidden from limited-access residents. */
+    public static function requireFinanceAccess(): void
+    {
+        self::requireLogin();
+        if (!self::$canViewFinance) {
+            throw new ApiError(403, 'Financial overview is not available for this account');
         }
     }
 

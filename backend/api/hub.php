@@ -77,10 +77,36 @@ final class Hub
             throw new ApiError(403, 'Admin only');
         }
         $id = Uuid::v4();
-        Database::run(
-            'INSERT INTO hub_items (id, kind, title, details, payload, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [$id, $kind, $title, $details, json_encode($payload, JSON_UNESCAPED_UNICODE) ?: '{}', 'open', Auth::$user['id']]
-        );
+        Database::beginTransaction();
+        try {
+            Database::run(
+                'INSERT INTO hub_items (id, kind, title, details, payload, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [$id, $kind, $title, $details, json_encode($payload, JSON_UNESCAPED_UNICODE) ?: '{}', 'open', Auth::$user['id']]
+            );
+            if ($kind === 'polls') {
+                $notificationBody = $details !== ''
+                    ? mb_substr($details, 0, 240)
+                    : 'A new household poll is open. Cast your vote.';
+                $recipients = Database::all(
+                    "SELECT user_id FROM residents
+                      WHERE active = 1 AND user_id IS NOT NULL AND user_id <> ?",
+                    [Auth::$user['id']]
+                );
+                foreach ($recipients as $recipient) {
+                    Services::notifyUser(
+                        (string) $recipient['user_id'],
+                        'poll_created',
+                        'New poll: ' . $title,
+                        $notificationBody,
+                        '/polls'
+                    );
+                }
+            }
+            Database::commit();
+        } catch (Throwable $e) {
+            Database::rollBack();
+            throw $e;
+        }
         return $id;
     }
 

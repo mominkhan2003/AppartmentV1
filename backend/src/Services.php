@@ -122,7 +122,7 @@ final class Services
 
     public static function submitClaim(array $body): int
     {
-        Auth::requireLogin();
+        Auth::requireFinanceAccess();
         $me = Auth::myResidentId();
         if ($me === null) {
             throw new ApiError(400, 'Your resident account is not linked');
@@ -246,11 +246,165 @@ final class Services
         if (!Database::row('SELECT id FROM residents WHERE id = ?', [$residentId])) {
             throw new ApiError(404, 'Resident not found');
         }
-        Database::run(
-            'INSERT INTO ledger_entries (id, resident_id, kind, amount_cents, note, created_by) VALUES (?, ?, ?, ?, ?, ?)',
-            [Uuid::v4(), $residentId, 'payment', $amountCents, $note, Auth::$user['id']]
-        );
-        Audit::log('record_payment', 'resident', $residentId, ['amount_cents' => $amountCents, 'note' => $note]);
+        Database::beginTransaction();
+        try {
+            Database::run(
+                'INSERT INTO ledger_entries (id, resident_id, kind, amount_cents, note, created_by) VALUES (?, ?, ?, ?, ?, ?)',
+                [Uuid::v4(), $residentId, 'payment', $amountCents, $note, Auth::$user['id']]
+            );
+
+            // A recorded payment settles the oldest open round dues first. Extra
+            // money stays in the ledger as member credit.
+            $allocated = 0;
+            if ($amountCents > 0) {
+                $remaining = $amountCents;
+                $dues = Database::all(
+                    "SELECT d.round_id, d.resident_id, d.required_cents, d.paid_cents
+                       FROM contribution_dues d
+                       JOIN contribution_rounds cr ON cr.id = d.round_id
+                      WHERE d.resident_id = ? AND d.status IN ('pending', 'partial')
+                        AND d.required_cents > d.paid_cents
+                      ORDER BY cr.round_no, cr.collected_on
+                      FOR UPDATE",
+                    [$residentId]
+                );
+                foreach ($dues as $due) {
+                    if ($remaining <= 0) {
+                        break;
+                    }
+                    $outstanding = max(0, (int) $due['required_cents'] - (int) $due['paid_cents']);
+                    $applied = min($remaining, $outstanding);
+                    if ($applied <= 0) {
+                        continue;
+                    }
+                    $paid = (int) $due['paid_cents'] + $applied;
+                    $status = $paid >= (int) $due['required_cents'] ? 'settled' : 'partial';
+                    Database::run(
+                        'UPDATE contribution_dues SET paid_cents = ?, status = ? WHERE round_id = ? AND resident_id = ?',
+                        [$paid, $status, $due['round_id'], $residentId]
+                    );
+                    $remaining -= $applied;
+                    $allocated += $applied;
+                }
+            }
+
+            Audit::log('record_payment', 'resident', $residentId, [
+                'amount_cents' => $amountCents,
+                'note' => $note,
+                'dues_allocated_cents' => $allocated,
+            ]);
+            Database::commit();
+        } catch (Throwable $e) {
+            Database::rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Starts the next contribution round. Every active resident receives the
+     * round target as a new due; unpaid balances from earlier rounds stay open,
+     * so the member's total outstanding is the sum of all pending rounds.
+     */
+    public static function startContributionRound(array $body): array
+    {
+        Auth::requireAdmin();
+        $amount = Req::centsFrom($body, 'amount_cents') ?? 1000;
+        $collectedOn = Req::date($body, 'collected_on') ?? date('Y-m-d');
+        $customLabel = Req::text($body, 'label', 60);
+        $roundNote = Req::text($body, 'note', 500);
+
+        Database::beginTransaction();
+        try {
+            $last = Database::row(
+                'SELECT round_no FROM contribution_rounds ORDER BY round_no DESC LIMIT 1 FOR UPDATE'
+            );
+            $roundNo = ($last ? (int) $last['round_no'] : 0) + 1;
+            $label = $customLabel ?? ('Round ' . $roundNo);
+            $roundId = Uuid::v4();
+            Database::run(
+                'INSERT INTO contribution_rounds (id, round_no, label, target_per_member_cents, collected_on, note, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())',
+                [$roundId, $roundNo, $label, $amount, $collectedOn, $roundNote]
+            );
+
+            $members = Database::all(
+                'SELECT id, display_name, user_id FROM residents
+                  WHERE active = 1 AND can_view_finance = 1
+                  ORDER BY display_name'
+            );
+            $carried = [];
+            foreach (Database::all(
+                "SELECT resident_id,
+                        COALESCE(SUM(CASE WHEN required_cents > paid_cents THEN required_cents - paid_cents ELSE 0 END), 0) AS outstanding
+                   FROM contribution_dues
+                  WHERE status IN ('pending', 'partial')
+                  GROUP BY resident_id"
+            ) as $row) {
+                $carried[$row['resident_id']] = (int) $row['outstanding'];
+            }
+
+            $dueCount = 0;
+            $notified = 0;
+            foreach ($members as $member) {
+                $prior = (int) ($carried[$member['id']] ?? 0);
+                $total = $prior + $amount;
+                $dueNote = sprintf('Pending €%.2f contribution for %s.', $amount / 100, $label);
+                if ($prior > 0) {
+                    $dueNote .= sprintf(
+                        ' €%.2f carried forward from earlier rounds; total outstanding €%.2f.',
+                        $prior / 100,
+                        $total / 100
+                    );
+                }
+                Database::run(
+                    'INSERT INTO contribution_dues (round_id, resident_id, required_cents, paid_cents, status, note)
+                     VALUES (?, ?, ?, 0, ?, ?)',
+                    [$roundId, $member['id'], $amount, 'pending', $dueNote]
+                );
+                $dueCount++;
+
+                if (!empty($member['user_id']) && $member['user_id'] !== Auth::$user['id']) {
+                    $notification = sprintf('€%.2f is now due for %s.', $amount / 100, $label);
+                    if ($prior > 0) {
+                        $notification .= sprintf(
+                            ' You already had €%.2f outstanding, so your total is €%.2f.',
+                            $prior / 100,
+                            $total / 100
+                        );
+                    }
+                    self::notifyUser(
+                        (string) $member['user_id'],
+                        'contribution_round',
+                        'New contribution round: ' . $label,
+                        $notification,
+                        '/balance'
+                    );
+                    $notified++;
+                }
+            }
+
+            Audit::log('start_contribution_round', 'contribution_round', $roundId, [
+                'round_no' => $roundNo,
+                'label' => $label,
+                'amount_cents' => $amount,
+                'due_count' => $dueCount,
+                'notified' => $notified,
+            ]);
+            Database::commit();
+
+            return [
+                'id' => $roundId,
+                'round_no' => $roundNo,
+                'label' => $label,
+                'amount_cents' => $amount,
+                'collected_on' => $collectedOn,
+                'due_count' => $dueCount,
+                'notified' => $notified,
+            ];
+        } catch (Throwable $e) {
+            Database::rollBack();
+            throw $e;
+        }
     }
 
     public static function addAdjustment(string $residentId, int $amountCents, string $reason): void
@@ -417,6 +571,15 @@ final class Services
 
     /* --------------------------------------------------- household & residents */
 
+    private static function residentRoomId(array $body): ?string
+    {
+        $roomId = Req::spaceId($body, 'room_id');
+        if ($roomId !== null && !Database::row("SELECT id FROM spaces WHERE id = ? AND kind = 'bedroom'", [$roomId])) {
+            throw new ApiError(400, 'Room not found');
+        }
+        return $roomId;
+    }
+
     public static function upsertResident(?string $id, array $body): string
     {
         Auth::requireLogin();
@@ -427,10 +590,11 @@ final class Services
             }
             $name = Req::text($body, 'display_name', 120, true);
             $rid = Uuid::v4();
+            $canViewFinance = !array_key_exists('can_view_finance', $body) || Req::bool($body, 'can_view_finance');
             Database::run(
-                'INSERT INTO residents (id, display_name, email, phone, room_id, active, is_sample) VALUES (?, ?, ?, ?, ?, ?, 0)',
-                [$rid, $name, Req::text($body, 'email'), Req::text($body, 'phone'), Req::uuid($body, 'room_id'),
-                 Req::bool($body, 'active') ? 1 : 0]
+                'INSERT INTO residents (id, display_name, email, phone, room_id, active, can_view_finance, is_sample) VALUES (?, ?, ?, ?, ?, ?, ?, 0)',
+                [$rid, $name, Req::text($body, 'email'), Req::text($body, 'phone'), self::residentRoomId($body),
+                 Req::bool($body, 'active') ? 1 : 0, $canViewFinance ? 1 : 0]
             );
             Audit::log('create_resident', 'resident', $rid, ['display_name' => $name]);
             return $rid;
@@ -464,10 +628,19 @@ final class Services
                 $sets[] = 'email = ?'; $params[] = $email;
             }
             if (array_key_exists('room_id', $body)) {
-                $sets[] = 'room_id = ?'; $params[] = Req::uuid($body, 'room_id');
+                $sets[] = 'room_id = ?'; $params[] = self::residentRoomId($body);
             }
             if (array_key_exists('active', $body)) {
                 $sets[] = 'active = ?'; $params[] = Req::bool($body, 'active') ? 1 : 0;
+            }
+            if (array_key_exists('can_view_finance', $body)) {
+                // Administrators always keep the financial overview; the switch only limits residents.
+                $adminResident = $row['user_id'] !== null && (bool) Database::row(
+                    "SELECT 1 AS ok FROM user_roles WHERE user_id = ? AND role = 'admin'",
+                    [$row['user_id']]
+                );
+                $sets[] = 'can_view_finance = ?';
+                $params[] = ($adminResident || Req::bool($body, 'can_view_finance')) ? 1 : 0;
             }
             if (array_key_exists('is_sample', $body)) {
                 $sets[] = 'is_sample = ?'; $params[] = (int) (bool) $body['is_sample'];
@@ -588,7 +761,7 @@ final class Services
                 Database::run(
                     'INSERT INTO chores (id, name, kind, space_id, frequency_days, rotates, active, current_resident_id, next_due)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [$id, $name, (string) $kind, Req::uuid($body, 'space_id'), $frequency,
+                    [$id, $name, (string) $kind, Req::spaceId($body, 'space_id'), $frequency,
                      Req::bool($body, 'rotates') ? 1 : 0, (Req::bool($body, 'active') || !array_key_exists('active', $body)) ? 1 : 0,
                      $current, Req::date($body, 'next_due') ?? date('Y-m-d')]
                 );
@@ -599,7 +772,7 @@ final class Services
                 }
                 Database::run(
                     'UPDATE chores SET name = ?, kind = ?, space_id = ?, frequency_days = ?, rotates = ?, active = ?, current_resident_id = ?, next_due = ? WHERE id = ?',
-                    [$name, (string) $kind, Req::uuid($body, 'space_id'), $frequency,
+                    [$name, (string) $kind, Req::spaceId($body, 'space_id'), $frequency,
                      Req::bool($body, 'rotates') ? 1 : 0, Req::bool($body, 'active') ? 1 : 0,
                      $current, Req::date($body, 'next_due') ?? date('Y-m-d'), $id]
                 );
@@ -769,7 +942,7 @@ final class Services
         Database::run(
             "INSERT INTO issues (id, space_id, category, description, photo_media_id, reporter_id, reporter_resident_id, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, 'open')",
-            [$id, Req::uuid($body, 'space_id'), Req::text($body, 'category', 40) ?? 'other',
+            [$id, Req::spaceId($body, 'space_id'), Req::text($body, 'category', 40) ?? 'other',
              $description, $photoMediaId, Auth::$user['id'], Auth::myResidentId()]
         );
         self::notifyAdmins('issue_reported', 'New issue reported', mb_substr($description, 0, 120), '/issues');
@@ -880,8 +1053,8 @@ final class Services
     public static function setWashroomAccess(array $body): void
     {
         Auth::requirePermission('household.manage');
-        $washroom = Req::uuid($body, 'washroom_id', true);
-        $bedroom = Req::uuid($body, 'bedroom_id', true);
+        $washroom = Req::spaceId($body, 'washroom_id', true);
+        $bedroom = Req::spaceId($body, 'bedroom_id', true);
         $washroomSpace = Database::row("SELECT kind FROM spaces WHERE id = ?", [$washroom]);
         $bedroomSpace = Database::row("SELECT kind FROM spaces WHERE id = ?", [$bedroom]);
         if (!$washroomSpace || $washroomSpace['kind'] !== 'washroom') {

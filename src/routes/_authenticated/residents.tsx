@@ -66,6 +66,7 @@ function Residents() {
                 email: text(d, "email") || null,
                 room_id: text(d, "room") || null,
                 active: d.get("active") === "on",
+                can_view_finance: d.get("can_view_finance") === "on",
               }
             : {}),
         };
@@ -84,6 +85,18 @@ function Residents() {
             <input name="active" type="checkbox" defaultChecked={r?.active ?? true} />
             Active resident
           </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              name="can_view_finance"
+              type="checkbox"
+              defaultChecked={r?.can_view_finance ?? true}
+            />
+            Can view budget &amp; financial plan
+          </label>
+          <p className="-mt-1 text-xs text-muted-foreground">
+            Unchecked residents only see cleaning, issues and household extras. The budget,
+            expenses and audit report stay hidden.
+          </p>
         </>
       )}
     </Editor>
@@ -165,6 +178,11 @@ function Residents() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Status value={r.active ? "active" : "inactive"} />
               {r.is_sample && <Status value="sample" />}
+              {r.can_view_finance === false && (
+                <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+                  Limited access
+                </span>
+              )}
               <span className="text-sm text-muted-foreground">
                 {spaces.find((s) => s.id === r.room_id)?.name ?? "Room not assigned"}
               </span>

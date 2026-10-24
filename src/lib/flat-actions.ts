@@ -89,6 +89,21 @@ export const recordPayment = (residentId: string, amountCents: number, note: str
   api.post("/payments", { resident_id: residentId, amount_cents: amountCents, note });
 export const addAdjustment = (residentId: string, amountCents: number, reason: string) =>
   api.post("/adjustments", { resident_id: residentId, amount_cents: amountCents, reason });
+export const startContributionRound = (values: {
+  amount_cents: number;
+  label?: string;
+  collected_on?: string;
+  note?: string | null;
+}) =>
+  api.post<{
+    id: string;
+    round_no: number;
+    label: string;
+    amount_cents: number;
+    collected_on: string;
+    due_count: number;
+    notified: number;
+  }>("/finance/rounds", values);
 
 /* ----------------------------------------------------------------- chores */
 
@@ -152,6 +167,7 @@ function pick(values: Partial<Resident>) {
     email: values.email ?? undefined,
     room_id: values.room_id ?? undefined,
     active: values.active ?? undefined,
+    can_view_finance: values.can_view_finance ?? undefined,
   };
 }
 

@@ -111,12 +111,14 @@ export function Editor({
   trigger,
   children,
   onSave,
+  successMessage = "Saved successfully",
   destructive = false,
 }: {
   title: string;
   trigger: ReactNode;
   children: ReactNode;
   onSave: (data: FormData) => Promise<unknown>;
+  successMessage?: string;
   destructive?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -127,7 +129,7 @@ export function Editor({
     setBusy(true);
     try {
       await onSave(data);
-      toast.success("Saved successfully");
+      toast.success(successMessage);
       setOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save");

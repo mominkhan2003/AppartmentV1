@@ -195,6 +195,25 @@ final class Req
         return $value;
     }
 
+    /**
+     * Space IDs use the seeded s0000000-… form, which is not a strict UUID.
+     * Everything else in the identifier is still validated to keep the shape.
+     */
+    public static function spaceId(array $body, string $key, bool $required = false): ?string
+    {
+        $value = isset($body[$key]) && is_string($body[$key]) ? trim($body[$key]) : '';
+        if ($value === '') {
+            if ($required) {
+                throw new ApiError(400, ucfirst(str_replace('_', ' ', $key)) . ' is required');
+            }
+            return null;
+        }
+        if (!preg_match('/^[0-9a-z]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value)) {
+            throw new ApiError(400, ucfirst(str_replace('_', ' ', $key)) . ' is not a valid room/space identifier');
+        }
+        return $value;
+    }
+
     /** Returns one of the allowed enum values, or null when absent (required => error). */
     public static function enum(array $body, string $key, array $allowed, bool $required = false): ?string
     {

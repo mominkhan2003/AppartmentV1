@@ -28,7 +28,7 @@ function Account() {
     )}
     {me && <div className="divide-y border-y">
       <section className="flex flex-wrap items-center justify-between gap-4 py-6">
-        <div><h2 className="flex items-center gap-2 font-semibold"><UserRound className="h-4 w-4" />Name</h2><p className="mt-2 text-sm">{me.resident?.display_name ?? "Not set"}</p><p className="mt-1 text-xs text-muted-foreground">{me.isAdmin ? "Administrator · Full access" : "Resident"}</p></div>
+        <div><h2 className="flex items-center gap-2 font-semibold"><UserRound className="h-4 w-4" />Name</h2><p className="mt-2 text-sm">{me.resident?.display_name ?? "Not set"}</p><p className="mt-1 text-xs text-muted-foreground">{me.isAdmin ? "Administrator · Full access" : me.can_view_finance === false ? "Limited access · Household pages only" : "Resident"}</p></div>
         <Editor title="Change name" trigger={<Button variant="outline" disabled={!me.resident}>Change name</Button>} onSave={async d => {
           if (!me.resident) throw new Error("Resident account not found");
           await updateResident(me.resident.id, { display_name: text(d, "name") }); await refresh();
