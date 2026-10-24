@@ -2,7 +2,7 @@ import { useState } from "react";
 import { RoleManager } from "@/components/flat/RoleManager";
 import { canManage } from "@/lib/portal-permissions";
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Check, X, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Empty } from "@/components/flat/Page";
 import { Editor, TextField, Notes, DataState, text } from "@/components/flat/Forms";
@@ -12,10 +12,18 @@ import {
   useSpaces,
   useGroups,
   useWashroomAccess,
+  useAccounts,
   useRefresh,
   useAudit,
 } from "@/lib/flat";
-import { saveGroup, saveSpace, setWashroomAccessBulk, pageHead } from "@/lib/flat-actions";
+import {
+  saveGroup,
+  saveSpace,
+  setWashroomAccessBulk,
+  approveAccount,
+  deleteUserAccount,
+  pageHead,
+} from "@/lib/flat-actions";
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () =>
     pageHead(
@@ -29,6 +37,7 @@ function Admin() {
   const [tab, setTab] = useState("household");
   const household = !!me.data && canManage(me.data.isAdmin, me.data.permissions, "household.manage");
   const audit = !!me.data && canManage(me.data.isAdmin, me.data.permissions, "audit.read");
+  const isAdmin = !!me.data && me.data.isAdmin;
   const { data: residents = [] } = useResidents();
   const { data: spaces = [] } = useSpaces();
   const { data: groups = [] } = useGroups();
@@ -37,7 +46,7 @@ function Admin() {
   return (
     <div>
       <PageHeader title="Admin Portal" sub={me.data?.isAdmin ? "Administrator · Full household access" : "Delegated household access"} />
-      {me.data && <div className="mb-6 flex flex-wrap gap-2">{[{id:"household",name:"Household",allowed:household},{id:"roles",name:"Roles & access",allowed:me.data.isAdmin},{id:"audit",name:"Audit history",allowed:audit}].filter(t=>t.allowed).map(t=><Button key={t.id} variant={tab===t.id?"default":"outline"} onClick={()=>setTab(t.id)}>{t.name}</Button>)}</div>}
+      {me.data && <div className="mb-6 flex flex-wrap gap-2">{[{id:"household",name:"Household",allowed:household},{id:"accounts",name:"Accounts",allowed:isAdmin},{id:"roles",name:"Roles & access",allowed:me.data.isAdmin},{id:"audit",name:"Audit history",allowed:audit}].filter(t=>t.allowed).map(t=><Button key={t.id} variant={tab===t.id?"default":"outline"} onClick={()=>setTab(t.id)}>{t.name}</Button>)}</div>}
       <DataState query={me} />
       {me.data && !household && !audit && !me.data.isAdmin ? (
         <Empty>You do not have access to portal settings.</Empty>
@@ -205,6 +214,7 @@ function Admin() {
             </section>
             </>}
             {tab === "roles" && me.data.isAdmin && <RoleManager />}
+            {tab === "accounts" && isAdmin && <Accounts />}
             {tab === "audit" && audit && <Audit />}
           </>
         )
@@ -212,6 +222,129 @@ function Admin() {
     </div>
   );
 }
+function Accounts() {
+  const query = useAccounts();
+  const refresh = useRefresh();
+  const { data: accounts = [] } = query;
+  const { data: meData } = useMe();
+  const myId = meData?.user.id ?? "";
+  const pending = accounts.filter((a) => !a.approved);
+  return (
+    <section className="mt-8">
+      <h2 className="mb-2 flex items-center gap-2 text-xl font-semibold">
+        <ShieldCheck className="h-5 w-5" />
+        Accounts & verification
+      </h2>
+      <p className="mb-4 text-sm text-muted-foreground">
+        New signups appear as <strong>pending</strong>. Approve to open the portal for them, or
+        delete to remove the account entirely.
+      </p>
+      <DataState query={query} />
+      <div className="mb-6 rounded-lg border border-primary/30 bg-secondary/40 p-4">
+        <h3 className="inline font-semibold">Verification inbox </h3>
+        <span className="text-sm text-muted-foreground">({pending.length} waiting)</span>
+        <div className="mt-3 divide-y pt-1">
+          {pending.map((a) => (
+            <div key={a.id} className="flex items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="font-medium break-words">{a.display_name ?? a.email}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {a.email} · joined {new Date(a.created_at).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    await approveAccount(a.id, true);
+                    await refresh();
+                  }}
+                >
+                  <Check />
+                  Approve
+                </Button>
+                <DeleteAccountButton id={a.id} label={a.display_name ?? a.email} />
+              </div>
+            </div>
+          ))}
+          {!pending.length && <p className="py-2 text-sm text-muted-foreground">Nothing waiting — all accounts are verified.</p>}
+        </div>
+      </div>
+      <div className="divide-y border-y">
+        {accounts.map((a) => (
+          <div key={a.id} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="font-medium break-words">
+                {a.display_name ? `${a.display_name} ` : ""}
+                <span className="text-muted-foreground">{a.email}</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {a.approved ? "Verified" : "Pending approval"} ·{" "}
+                {a.admin_roles ? "Admin" : "Resident"}
+                {a.portal_roles ? " · Portal: " + a.portal_roles : ""} · joined{" "}
+                {new Date(a.created_at).toLocaleDateString()}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {a.approved && !a.admin_roles && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await approveAccount(a.id, false);
+                    await refresh();
+                  }}
+                >
+                  <X />
+                  Revoke
+                </Button>
+              )}
+              {!a.approved && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await approveAccount(a.id, true);
+                    await refresh();
+                  }}
+                >
+                  <Check />
+                  Approve
+                </Button>
+              )}
+              {a.id !== myId && <DeleteAccountButton id={a.id} label={a.display_name ?? a.email} />}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DeleteAccountButton({ id, label }: { id: string; label: string }) {
+  const refresh = useRefresh();
+  return (
+    <Editor
+      title={"Delete account · " + label}
+      destructive
+      trigger={
+        <Button variant="outline" size="icon" aria-label={"Delete account " + label}>
+          <Trash2 />
+        </Button>
+      }
+      onSave={async () => {
+        await deleteUserAccount(id);
+        await refresh();
+      }}
+    >
+      <p className="text-sm text-muted-foreground">
+        Deletes the login account, its sessions and role assignments. The resident profile (if any)
+        stays in the household records but loses its login link.
+      </p>
+    </Editor>
+  );
+}
+
 function Audit() {
   const query = useAudit();
   const { data: residents = [] } = useResidents();

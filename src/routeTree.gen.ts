@@ -33,10 +33,12 @@ import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedNoticesRouteImport } from './routes/_authenticated/notices'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedPollsRouteImport } from './routes/_authenticated/polls'
+import { Route as AuthenticatedReportRouteImport } from './routes/_authenticated/report'
 import { Route as AuthenticatedResidentsRouteImport } from './routes/_authenticated/residents'
 import { Route as AuthenticatedRulesRouteImport } from './routes/_authenticated/rules'
 import { Route as AuthenticatedShoppingRouteImport } from './routes/_authenticated/shopping'
 import { Route as AuthenticatedStudioRouteImport } from './routes/_authenticated/studio'
+import { Route as AuthenticatedWeeklyRouteImport } from './routes/_authenticated/weekly'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -158,6 +160,11 @@ const AuthenticatedPollsRoute = AuthenticatedPollsRouteImport.update({
   path: '/polls',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedReportRoute = AuthenticatedReportRouteImport.update({
+  id: '/report',
+  path: '/report',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedResidentsRoute = AuthenticatedResidentsRouteImport.update({
   id: '/residents',
   path: '/residents',
@@ -176,6 +183,11 @@ const AuthenticatedShoppingRoute = AuthenticatedShoppingRouteImport.update({
 const AuthenticatedStudioRoute = AuthenticatedStudioRouteImport.update({
   id: '/studio',
   path: '/studio',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedWeeklyRoute = AuthenticatedWeeklyRouteImport.update({
+  id: '/weekly',
+  path: '/weekly',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 
@@ -203,10 +215,12 @@ export interface FileRoutesByFullPath {
   '/notices': typeof AuthenticatedNoticesRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/polls': typeof AuthenticatedPollsRoute
+  '/report': typeof AuthenticatedReportRoute
   '/residents': typeof AuthenticatedResidentsRoute
   '/rules': typeof AuthenticatedRulesRoute
   '/shopping': typeof AuthenticatedShoppingRoute
   '/studio': typeof AuthenticatedStudioRoute
+  '/weekly': typeof AuthenticatedWeeklyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -232,10 +246,12 @@ export interface FileRoutesByTo {
   '/notices': typeof AuthenticatedNoticesRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/polls': typeof AuthenticatedPollsRoute
+  '/report': typeof AuthenticatedReportRoute
   '/residents': typeof AuthenticatedResidentsRoute
   '/rules': typeof AuthenticatedRulesRoute
   '/shopping': typeof AuthenticatedShoppingRoute
   '/studio': typeof AuthenticatedStudioRoute
+  '/weekly': typeof AuthenticatedWeeklyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -263,10 +279,12 @@ export interface FileRoutesById {
   '/_authenticated/notices': typeof AuthenticatedNoticesRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/polls': typeof AuthenticatedPollsRoute
+  '/_authenticated/report': typeof AuthenticatedReportRoute
   '/_authenticated/residents': typeof AuthenticatedResidentsRoute
   '/_authenticated/rules': typeof AuthenticatedRulesRoute
   '/_authenticated/shopping': typeof AuthenticatedShoppingRoute
   '/_authenticated/studio': typeof AuthenticatedStudioRoute
+  '/_authenticated/weekly': typeof AuthenticatedWeeklyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -294,10 +312,12 @@ export interface FileRouteTypes {
     | '/notices'
     | '/notifications'
     | '/polls'
+    | '/report'
     | '/residents'
     | '/rules'
     | '/shopping'
     | '/studio'
+    | '/weekly'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -323,10 +343,12 @@ export interface FileRouteTypes {
     | '/notices'
     | '/notifications'
     | '/polls'
+    | '/report'
     | '/residents'
     | '/rules'
     | '/shopping'
     | '/studio'
+    | '/weekly'
   id:
     | '__root__'
     | '/'
@@ -353,10 +375,12 @@ export interface FileRouteTypes {
     | '/_authenticated/notices'
     | '/_authenticated/notifications'
     | '/_authenticated/polls'
+    | '/_authenticated/report'
     | '/_authenticated/residents'
     | '/_authenticated/rules'
     | '/_authenticated/shopping'
     | '/_authenticated/studio'
+    | '/_authenticated/weekly'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -536,6 +560,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPollsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/report': {
+      id: '/_authenticated/report'
+      path: '/report'
+      fullPath: '/report'
+      preLoaderRoute: typeof AuthenticatedReportRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/residents': {
       id: '/_authenticated/residents'
       path: '/residents'
@@ -564,6 +595,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStudioRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/weekly': {
+      id: '/_authenticated/weekly'
+      path: '/weekly'
+      fullPath: '/weekly'
+      preLoaderRoute: typeof AuthenticatedWeeklyRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -588,10 +626,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedNoticesRoute: typeof AuthenticatedNoticesRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedPollsRoute: typeof AuthenticatedPollsRoute
+  AuthenticatedReportRoute: typeof AuthenticatedReportRoute
   AuthenticatedResidentsRoute: typeof AuthenticatedResidentsRoute
   AuthenticatedRulesRoute: typeof AuthenticatedRulesRoute
   AuthenticatedShoppingRoute: typeof AuthenticatedShoppingRoute
   AuthenticatedStudioRoute: typeof AuthenticatedStudioRoute
+  AuthenticatedWeeklyRoute: typeof AuthenticatedWeeklyRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -615,10 +655,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedNoticesRoute: AuthenticatedNoticesRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedPollsRoute: AuthenticatedPollsRoute,
+  AuthenticatedReportRoute: AuthenticatedReportRoute,
   AuthenticatedResidentsRoute: AuthenticatedResidentsRoute,
   AuthenticatedRulesRoute: AuthenticatedRulesRoute,
   AuthenticatedShoppingRoute: AuthenticatedShoppingRoute,
   AuthenticatedStudioRoute: AuthenticatedStudioRoute,
+  AuthenticatedWeeklyRoute: AuthenticatedWeeklyRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

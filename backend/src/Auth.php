@@ -20,6 +20,8 @@ final class Auth
     public static ?array $user = null;      // app_users row (id, email)
     public static ?array $resident = null;  // linked residents row
     public static bool $isAdmin = false;
+    public static bool $approved = true;    // admin-verified accounts only receive portal access
+    public static bool $forcePasswordChange = false; // seeded accounts must set their own password first
     public static array $permissions = [];  // delegated portal permissions
     private static ?string $lastResetToken = null;
 
@@ -37,7 +39,7 @@ final class Auth
             return;
         }
         $row = Database::row(
-            "SELECT u.id, u.email, s.expires_at, s.token_hash
+            "SELECT u.id, u.email, u.username, u.approved, u.force_password_change, s.expires_at, s.token_hash
                FROM auth_sessions s JOIN app_users u ON u.id = s.user_id
               WHERE s.token_hash = ? LIMIT 1",
             [Tokens::hash($token)]
@@ -49,7 +51,9 @@ final class Auth
             Database::run('DELETE FROM auth_sessions WHERE token_hash = ?', [$row['token_hash']]);
             return;
         }
-        self::$user = ['id' => $row['id'], 'email' => $row['email']];
+        self::$user = ['id' => $row['id'], 'email' => $row['email'], 'username' => $row['username'] ?? null];
+        self::$approved = ((int) $row['approved']) === 1;
+        self::$forcePasswordChange = ((int) ($row['force_password_change'] ?? 0)) === 1;
         Database::run('UPDATE auth_sessions SET last_used_at = UTC_TIMESTAMP() WHERE token_hash = ?', [$row['token_hash']]);
 
         self::$isAdmin = (bool) Database::row("SELECT 1 AS ok FROM user_roles WHERE user_id = ? AND role = 'admin'", [$row['id']]);
@@ -74,6 +78,9 @@ final class Auth
     {
         if (self::$user === null) {
             throw new ApiError(401, 'Please sign in');
+        }
+        if (!self::$approved) {
+            throw new ApiError(403, 'Your account is awaiting admin verification');
         }
     }
 
@@ -107,23 +114,39 @@ final class Auth
 
     /* ------------------------------------------------------------------ sessions */
 
+    /** Accepts an e-mail address or a seeded username (e.g. "momin"). */
+    private static function normaliseIdentifier(string $raw): string
+    {
+        $value = mb_strtolower(trim($raw));
+        if ($value === '') {
+            throw new ApiError(400, 'Enter your email or username');
+        }
+        if (filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            return $value;
+        }
+        if (!preg_match('/^[a-z0-9._-]{3,40}$/', $value)) {
+            throw new ApiError(400, 'Enter a valid email address or username');
+        }
+        return $value;
+    }
+
     public static function login(string $email, string $password): array
     {
-        $email = mb_strtolower(trim($email));
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new ApiError(400, 'Enter a valid email address');
-        }
+        $identifier = self::normaliseIdentifier($email);
         if ((string) $password === '') {
             throw new ApiError(400, 'Enter your password');
         }
-        self::rateLimitLogin($email);
+        self::rateLimitLogin($identifier);
 
-        $row = Database::row('SELECT id, email, password_hash FROM app_users WHERE email = ?', [$email]);
+        $row = Database::row(
+            'SELECT id, email, username, password_hash FROM app_users WHERE email = ? OR username = ? LIMIT 1',
+            [$identifier, $identifier]
+        );
         $ok = $row && password_verify((string) $password, (string) $row['password_hash']);
-        Database::run('INSERT INTO login_attempts (email, ip, success) VALUES (?, ?, ?)', [$email, Http::ip(), $ok ? 1 : 0]);
+        Database::run('INSERT INTO login_attempts (email, ip, success) VALUES (?, ?, ?)', [$identifier, Http::ip(), $ok ? 1 : 0]);
         if (!$ok) {
             // Uniform message: never disclose whether the account exists.
-            throw new ApiError(401, 'Invalid email or password');
+            throw new ApiError(401, 'Invalid email/username or password');
         }
         if (password_needs_rehash((string) $row['password_hash'], PASSWORD_DEFAULT)) {
             Database::run('UPDATE app_users SET password_hash = ? WHERE id = ?',
@@ -151,10 +174,13 @@ final class Auth
         Database::beginTransaction();
         try {
             $userId = Uuid::v4();
-            Database::run('INSERT INTO app_users (id, email, password_hash) VALUES (?, ?, ?)',
-                [$userId, $email, password_hash((string) $password, PASSWORD_DEFAULT)]);
-
+            // Pre-existing admin? Then this household is already running: new people wait for
+            // admin verification. The very first account (no admin at all) is auto-approved admin.
             $anyAdmin = Database::row("SELECT 1 AS ok FROM user_roles WHERE role = 'admin' LIMIT 1");
+            $approved = $anyAdmin ? 0 : 1;
+            Database::run('INSERT INTO app_users (id, email, password_hash, approved) VALUES (?, ?, ?, ?)',
+                [$userId, $email, password_hash((string) $password, PASSWORD_DEFAULT), $approved]);
+
             Database::run('INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, ?)',
                 [Uuid::v4(), $userId, $anyAdmin ? 'resident' : 'admin']);
 
@@ -219,7 +245,7 @@ final class Auth
         if (!$row || !password_verify($current, (string) $row['password_hash'])) {
             throw new ApiError(401, 'Current password is not correct');
         }
-        Database::run('UPDATE app_users SET password_hash = ? WHERE id = ?', [password_hash($new, PASSWORD_DEFAULT), self::$user['id']]);
+        Database::run('UPDATE app_users SET password_hash = ?, force_password_change = 0 WHERE id = ?', [password_hash($new, PASSWORD_DEFAULT), self::$user['id']]);
         // Invalidate other sessions; keep the current one.
         $cookieName = (string) (self::$config['auth_session_cookie'] ?? 'fmsession');
         $token = (string) ($_COOKIE[$cookieName] ?? '');
@@ -252,11 +278,12 @@ final class Auth
     public static function requestPasswordReset(string $email): string
     {
         self::$lastResetToken = null;
-        $email = mb_strtolower(trim($email));
-        $row = Database::row('SELECT id FROM app_users WHERE email = ?', [$email]);
+        $identifier = mb_strtolower(trim($email));
+        $row = Database::row('SELECT id, email FROM app_users WHERE email = ? OR username = ? LIMIT 1', [$identifier, $identifier]);
         if (!$row) {
             return 'SENT';
         }
+        $email = (string) $row['email'];
         $token = Tokens::generate();
         self::$lastResetToken = $token; // only surfaced when app_debug && mail disabled
         Database::run('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL', [$row['id']]);

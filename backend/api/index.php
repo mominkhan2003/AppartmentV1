@@ -37,6 +37,10 @@ require __DIR__ . '/../src/Media.php';
 require __DIR__ . '/../src/Permissions.php';
 require __DIR__ . '/../src/Repositories.php';
 require __DIR__ . '/../src/Services.php';
+require __DIR__ . '/../src/ServicesCms.php';
+require __DIR__ . '/../src/ServicesCmsContent.php';
+require __DIR__ . '/../src/ServicesCmsDonations.php';
+require __DIR__ . '/../src/ServicesCmsSocial.php';
 require __DIR__ . '/routes.php';
 
 $config = require __DIR__ . '/../config/bootstrap.php';

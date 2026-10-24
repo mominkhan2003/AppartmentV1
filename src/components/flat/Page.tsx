@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 
 export function PageHeader({ title, sub, action }: { title: string; sub?: string | undefined; action?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-3xl font-bold">{title}</h1>
-        {sub && <p className="mt-1 text-muted-foreground">{sub}</p>}
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 sm:mb-6 sm:gap-4">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold sm:text-3xl">{title}</h1>
+        {sub && <p className="mt-1 text-sm text-muted-foreground sm:text-base">{sub}</p>}
       </div>
       {action}
     </div>
@@ -14,7 +14,7 @@ export function PageHeader({ title, sub, action }: { title: string; sub?: string
 
 export function Panel({ title, children, className = "" }: { title?: string; children: ReactNode; className?: string }) {
   return (
-    <section className={"rounded-2xl border bg-card p-5 " + className}>
+    <section className={"rounded-2xl border bg-card p-4 sm:p-5 " + className}>
       {title && <h2 className="mb-3 text-lg font-semibold">{title}</h2>}
       {children}
     </section>
@@ -23,9 +23,9 @@ export function Panel({ title, children, className = "" }: { title?: string; chi
 
 export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: "good" | "bad" }) {
   return (
-    <div className="rounded-2xl border bg-card p-5">
-      <div className="text-sm text-muted-foreground">{label}</div>
-      <div className={"mt-1 font-display text-2xl font-bold " + (tone === "good" ? "text-success" : tone === "bad" ? "text-destructive" : "")}>{value}</div>
+    <div className="rounded-2xl border bg-card p-4 sm:p-5">
+      <div className="text-xs text-muted-foreground sm:text-sm">{label}</div>
+      <div className={"mt-1 font-display text-xl font-bold sm:text-2xl " + (tone === "good" ? "text-success" : tone === "bad" ? "text-destructive" : "")}>{value}</div>
     </div>
   );
 }

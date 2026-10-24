@@ -15,10 +15,21 @@ function flatmateDiagnosticFail(string $message): never
 
 $configDirectory = flatmateConfigDirectory();
 if ($configDirectory === null) {
-    flatmateDiagnosticFail('Database config was not found. Create ~/flatmate-config/database.php or set APP_CONFIG_DIR.');
+    fwrite(STDERR, "Checked config directories:\n");
+    foreach (flatmateConfigCandidates() as $candidate) {
+        $file = $candidate . '/database.php';
+        $status = is_file($file) ? (is_readable($file) ? 'present/readable' : 'present/not readable') : 'not found';
+        fwrite(STDERR, "  {$file}: {$status}\n");
+    }
+    flatmateDiagnosticFail('Create database.php in the actual cPanel account home under flatmate-config, or set APP_CONFIG_DIR to its absolute directory. A literal ~ is not expanded by PHP.');
 }
+echo "Database config found at {$configDirectory}/database.php.\n";
 
-$config = require $configDirectory . '/database.php';
+try {
+    $config = require $configDirectory . '/database.php';
+} catch (Throwable) {
+    flatmateDiagnosticFail('The database config file could not be loaded. Check PHP syntax; its contents are not displayed.');
+}
 if (!flatmateDatabaseConfigIsValid($config)) {
     flatmateDiagnosticFail('Database config is invalid or still contains placeholders. Check host, database, username, and password; values are not displayed.');
 }

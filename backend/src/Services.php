@@ -81,6 +81,8 @@ final class Services
         $description = Req::text($body, 'description', 2000);
         $category = Req::text($body, 'category', 40) ?? 'general';
         $expenseDate = Req::date($body, 'expense_date') ?? date('Y-m-d');
+        $fundingSource = in_array(($body['funding_source'] ?? 'pool'), ['pool', 'direct'], true) ? (string) $body['funding_source'] : 'pool';
+        $roundLabel = Req::text($body, 'round_label', 60);
         $groupId = Req::uuid($body, 'group_id');
         $notes = Req::text($body, 'notes', 2000);
         $receiptMediaId = Req::uuid($body, 'receipt_media_id');
@@ -96,12 +98,13 @@ final class Services
             self::ensureParticipantsInGroup($groupId, $participants, $custom);
             self::assertReceiptUnused($receiptMediaId, $receiptHash);
             Database::run(
-                'INSERT INTO expenses (kind, group_id, title, description, category, amount_cents, expense_date, payer_resident_id,
-                       receipt_media_id, receipt_hash, notes, items, status, created_by, reviewed_by, reviewed_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())',
+                'INSERT INTO expenses (kind, funding_source, group_id, title, description, category, round_label, amount_cents,
+                       expense_date, payer_resident_id, receipt_media_id, receipt_hash, notes, items, status, created_by,
+                       reviewed_by, reviewed_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())',
                 [
-                    'shared', $groupId, $title, $description, $category, $amount, $expenseDate,
-                    $receiptMediaId, $receiptHash, $notes, null, 'approved', Auth::$user['id'], Auth::$user['id'],
+                    'shared', $fundingSource, $groupId, $title, $description, $category, $roundLabel, $amount,
+                    $expenseDate, $receiptMediaId, $receiptHash, $notes, null, 'approved', Auth::$user['id'], Auth::$user['id'],
                 ]
             );
             $expenseId = (int) Database::insertId();
@@ -268,12 +271,19 @@ final class Services
 
     public static function applySplit(int $expenseId, int $amountCents, array $participants, ?array $custom): void
     {
+        /** Non-resident friends can share an expense too: participants named "ext:<name>" carry no ledger row. */
+        $externalName = static function (string $raw): ?string {
+            if (!str_starts_with($raw, 'ext:')) {
+                return null;
+            }
+            $name = trim(mb_substr($raw, 4));
+            return $name !== '' ? mb_substr($name, 0, 120) : null;
+        };
+
         if (is_array($custom) && $custom) {
             $total = 0;
-            foreach ($custom as $residentId => $value) {
-                if (!Uuid::isValid((string) $residentId)) {
-                    throw new ApiError(400, 'Custom share keys must be resident ids');
-                }
+            foreach ($custom as $key => $value) {
+                $key = (string) $key;
                 $amount = (int) $value;
                 if ($amount < 0) {
                     throw new ApiError(400, 'Negative share');
@@ -282,11 +292,22 @@ final class Services
                     continue;
                 }
                 $total += $amount;
-                Database::run('INSERT INTO expense_shares (id, expense_id, resident_id, amount_cents) VALUES (?, ?, ?, ?)',
-                    [Uuid::v4(), $expenseId, (string) $residentId, $amount]);
+                $name = $externalName($key);
+                if ($name !== null) {
+                    Database::run(
+                        'INSERT INTO expense_shares (id, expense_id, resident_id, external_name, amount_cents) VALUES (?, ?, NULL, ?, ?)',
+                        [Uuid::v4(), $expenseId, $name, $amount]
+                    );
+                    continue;
+                }
+                if (!Uuid::isValid($key)) {
+                    throw new ApiError(400, 'Custom share keys must be resident ids');
+                }
+                Database::run('INSERT INTO expense_shares (id, expense_id, resident_id, external_name, amount_cents) VALUES (?, ?, ?, NULL, ?)',
+                    [Uuid::v4(), $expenseId, $key, $amount]);
                 Database::run('INSERT INTO ledger_entries (id, resident_id, kind, amount_cents, expense_id, note, created_by)
                                VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [Uuid::v4(), (string) $residentId, 'share', -$amount, $expenseId, 'Share of expense', Auth::$user['id'] ?? null]);
+                    [Uuid::v4(), $key, 'share', -$amount, $expenseId, 'Share of expense', Auth::$user['id'] ?? null]);
             }
             if ($total !== $amountCents) {
                 throw new ApiError(400, "Custom shares ($total) must add up to the total ($amountCents)");
@@ -303,7 +324,15 @@ final class Services
         foreach ($participants as $pid) {
             $i++;
             $amt = $base + ($i <= $rem ? 1 : 0);
-            Database::run('INSERT INTO expense_shares (id, expense_id, resident_id, amount_cents) VALUES (?, ?, ?, ?)',
+            $name = $externalName((string) $pid);
+            if ($name !== null) {
+                Database::run(
+                    'INSERT INTO expense_shares (id, expense_id, resident_id, external_name, amount_cents) VALUES (?, ?, NULL, ?, ?)',
+                    [Uuid::v4(), $expenseId, $name, $amt]
+                );
+                continue;
+            }
+            Database::run('INSERT INTO expense_shares (id, expense_id, resident_id, external_name, amount_cents) VALUES (?, ?, ?, NULL, ?)',
                 [Uuid::v4(), $expenseId, (string) $pid, $amt]);
             Database::run('INSERT INTO ledger_entries (id, resident_id, kind, amount_cents, expense_id, note, created_by)
                            VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -318,6 +347,9 @@ final class Services
         }
         $team = array_merge($participants, array_keys($custom ?? []));
         foreach ($team as $rid) {
+            if (str_starts_with((string) $rid, 'ext:')) {
+                continue; // non-resident guests may join any expense
+            }
             if (!Uuid::isValid((string) $rid)) {
                 throw new ApiError(400, 'All participants must belong to the selected group');
             }
@@ -325,6 +357,62 @@ final class Services
                 throw new ApiError(400, 'All participants must belong to the selected group');
             }
         }
+    }
+
+    /* --------------------------------------------------------- weekly meal plan */
+
+    /** Normalizes any calendar day to that week's Monday (the meal-plan week key). */
+    private static function mondayOf(?string $date): string
+    {
+        $ts = strtotime($date ?? '');
+        if ($ts === false) {
+            $ts = time();
+        }
+        $days = ((int) date('N', $ts)) - 1; // 1=Monday..7=Sunday
+        return date('Y-m-d', strtotime("-$days days", $ts));
+    }
+
+    /** Upserts one timetable cell (week, day 1..7, meal) with cook, joining residents and a note. */
+    public static function saveMealCell(array $body): void
+    {
+        Auth::requireAdmin();
+        $week = self::mondayOf(Req::date($body, 'week'));
+        $day = (int) ($body['day'] ?? 0);
+        $meal = Req::enum($body, 'meal', ['breakfast', 'lunch', 'dinner'], true);
+        if ($day < 1 || $day > 7) {
+            throw new ApiError(400, 'Day must be 1 (Monday) to 7 (Sunday)');
+        }
+        $cook = Req::uuid($body, 'cook_resident_id');
+        if ($cook !== null && !Database::row('SELECT id FROM residents WHERE id = ?', [$cook])) {
+            throw new ApiError(404, 'Resident not found');
+        }
+        $participants = array_values(array_filter(array_map(
+            fn ($v) => trim((string) $v),
+            is_array($body['participants'] ?? null) ? (array) $body['participants'] : []
+        )));
+        foreach ($participants as $pid) {
+            if (!Database::row('SELECT id FROM residents WHERE id = ?', [$pid])) {
+                throw new ApiError(404, 'A chosen participant is not a resident');
+            }
+        }
+        $note = Req::text($body, 'notes', 255);
+        Database::run(
+            'INSERT INTO meal_plan (week_start, day_of_week, meal, cook_resident_id, participants, notes, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE cook_resident_id = VALUES(cook_resident_id), participants = VALUES(participants), notes = VALUES(notes)',
+            [$week, $day, $meal, $cook, json_encode($participants) ?: '[]', $note, Auth::$user['id']]
+        );
+        Audit::log('save_meal_cell', 'meal_plan', $week, ['day' => $day, 'meal' => $meal, 'cook' => $cook]);
+    }
+
+    public static function deleteMealCell(string $week, int $day, string $meal): void
+    {
+        Auth::requireAdmin();
+        if ($day < 1 || $day > 7) {
+            throw new ApiError(400, 'Day must be 1 (Monday) to 7 (Sunday)');
+        }
+        Database::run('DELETE FROM meal_plan WHERE week_start = ? AND day_of_week = ? AND meal = ?', [$week, $day, $meal]);
+        Audit::log('delete_meal_cell', 'meal_plan', $week, ['day' => $day, 'meal' => $meal]);
     }
 
     /* --------------------------------------------------- household & residents */
@@ -418,6 +506,60 @@ final class Services
         self::reassignChoresOf($id);
         Database::run('DELETE FROM residents WHERE id = ?', [$id]);
         Audit::log('delete_resident', 'resident', $id);
+    }
+
+    /* ------------------------------------------------------------ user accounts */
+
+    /** Approve (or revoke approval of) a login account; only admins may. */
+    public static function setUserApproval(string $userId, bool $approve): void
+    {
+        Auth::requireAdmin();
+        if (!Database::row('SELECT id, approved FROM app_users WHERE id = ?', [$userId])) {
+            throw new ApiError(404, 'Account not found');
+        }
+        Database::run('UPDATE app_users SET approved = ? WHERE id = ?', [$approve ? 1 : 0, $userId]);
+        Audit::log($approve ? 'approve_account' : 'revoke_approval', 'user', $userId, []);
+    }
+
+    public static function deleteUser(string $userId): void
+    {
+        Auth::requireAdmin();
+        if ($userId === (Auth::$user['id'] ?? '')) {
+            throw new ApiError(400, 'You cannot delete your own account');
+        }
+        if (!Database::row('SELECT id FROM app_users WHERE id = ?', [$userId])) {
+            throw new ApiError(404, 'Account not found');
+        }
+        // Keep receipts/photos addressable: detach ownership before the FK cascade removes roles/sessions.
+        Database::run('UPDATE media_assets SET owner_user_id = NULL WHERE owner_user_id = ?', [$userId]);
+        // If the linked resident profile has no ledger/shares history, remove it too so the
+        // member disappears from cleaning rotations and rosters instead of lingering "Unknown".
+        $resident = Database::row('SELECT id FROM residents WHERE user_id = ?', [$userId]);
+        if ($resident) {
+            $rid = (string) $resident['id'];
+            $history = (int) (
+                Database::row(
+                    'SELECT (SELECT COUNT(*) FROM ledger_entries WHERE resident_id = ?) +
+                            (SELECT COUNT(*) FROM expense_shares WHERE resident_id = ?) +
+                            (SELECT COUNT(*) FROM chore_events WHERE resident_id = ?) AS v',
+                    [$rid, $rid, $rid]
+                )['v'] ?? 0
+            );
+            Database::run('DELETE FROM chore_members WHERE resident_id = ?', [$rid]);
+            Database::run('UPDATE chores SET current_resident_id = NULL WHERE current_resident_id = ?', [$rid]);
+            Database::run('DELETE FROM group_members WHERE resident_id = ?', [$rid]);
+            Database::run('UPDATE meal_plan SET cook_resident_id = NULL WHERE cook_resident_id = ?', [$rid]);
+            Database::run('UPDATE meal_plan SET participants = JSON_REMOVE(participants, JSON_UNQUOTE(JSON_SEARCH(participants, ?, ?))) WHERE JSON_SEARCH(participants, ?, ?) IS NOT NULL',
+                ['one', '$', $rid, 'one', '$', $rid]);
+            if ($history === 0) {
+                Database::run('DELETE FROM residents WHERE id = ?', [$rid]);
+            } else {
+                // keeps the history; the former member shows as inactive but never in live rosters
+                Database::run('UPDATE residents SET user_id = NULL, active = 0 WHERE id = ?', [$rid]);
+            }
+        }
+        Database::run('DELETE FROM app_users WHERE id = ?', [$userId]);
+        Audit::log('delete_user', 'user', $userId, []);
     }
 
     /* ----------------------------------------------------------------- chores */

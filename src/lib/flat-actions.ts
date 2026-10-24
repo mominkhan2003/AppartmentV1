@@ -157,6 +157,12 @@ function pick(values: Partial<Resident>) {
 
 export const deleteResident = (id: string) => api.del(`/residents/${id}`);
 
+/* ---------------------------------------------------------- user accounts */
+
+export const approveAccount = (id: string, approve: boolean) =>
+  api.post(`/users/${id}/approval`, { approve });
+export const deleteUserAccount = (id: string) => api.del(`/users/${id}`);
+
 /* ------------------------------------------------------- groups & spaces */
 
 export const saveGroup = (id: string | undefined, values: { name: string; description: string | null; members: string[] }) =>
@@ -324,6 +330,17 @@ export const createSocialPost = (form: FormData) => api.post<import("@/lib/types
 export const deleteSocialPost = (id: string) => api.del(`/social-posts/${id}`);
 
 /* ---------------------------------------------------------- notifications */
+
+export const saveMealCell = (body: {
+  week: string;
+  day: number;
+  meal: string;
+  cook_resident_id?: string | null;
+  participants?: string[];
+  notes?: string | null;
+}) => api.put("/mealplan", body);
+export const clearMealCell = (week: string, day: number, meal: string) =>
+  api.del(`/mealplan?week=${week}&day=${day}&meal=${meal}`);
 
 export const notifications = () =>
   api.get<{ items: import("@/lib/types").NotificationRow[]; unread: number }>("/notifications");

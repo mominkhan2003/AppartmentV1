@@ -9,6 +9,11 @@ import { Home } from "lucide-react";
 import { login, signup, requestPasswordReset } from "@/lib/flat-actions";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: { pending?: string }): { pending?: true } => {
+    const out: { pending?: true } = {};
+    if (Object.keys(search).length > 0) out.pending = true;
+    return out;
+  },
   head: () => ({
     meta: [
       { title: "Sign in — FlatMate Hub" },
@@ -25,6 +30,7 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const nav = useNavigate();
   const qc = useQueryClient();
+  const { pending } = (Route.useSearch() ?? {}) as { pending?: true };
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,6 +68,12 @@ function AuthPage() {
           <span className="font-display text-xl font-bold">FlatMate Hub</span>
         </div>
         <h1 className="text-2xl font-bold">{mode === "in" ? "Welcome back" : "Join your flat"}</h1>
+        {pending && (
+          <p className="rounded-lg border border-primary/30 bg-secondary px-3 py-2 text-sm">
+            Your account was created ✔ An admin has to verify it before the portal opens up.
+            You will sign in normally as soon as it is approved.
+          </p>
+        )}
         {mode === "up" && (
           <div className="space-y-1">
             <Label htmlFor="name">Your name</Label>
@@ -69,8 +81,16 @@ function AuthPage() {
           </div>
         )}
         <div className="space-y-1">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Label htmlFor="email">{mode === "in" ? "Email or username" : "Email"}</Label>
+          <Input
+            id="email"
+            type={mode === "in" ? "text" : "email"}
+            autoComplete={mode === "in" ? "username" : "email"}
+            placeholder={mode === "in" ? "e.g. momin" : "you@example.com"}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
         </div>
         <div className="space-y-1">
           <Label htmlFor="pw">Password</Label>
@@ -78,7 +98,7 @@ function AuthPage() {
         </div>
         <Button className="w-full" disabled={busy}>{mode === "in" ? "Sign in" : "Create account"}</Button>
         {mode === "in" && <Button type="button" variant="link" className="w-full" disabled={busy} onClick={async () => {
-          if (!email) { toast.error("Enter your login email first."); return; }
+          if (!email) { toast.error("Enter your email or username first."); return; }
           setBusy(true);
           try {
             const result = await requestPasswordReset(email);
@@ -97,7 +117,7 @@ function AuthPage() {
           {mode === "in" ? "New here? Create an account" : "Already have an account? Sign in"}
         </Button>
         {mode === "up" && (
-          <p className="text-xs text-muted-foreground">Password: at least 8 characters. The first person to sign up becomes the flat admin. If the admin added you with your email, your account links automatically.</p>
+          <p className="text-xs text-muted-foreground">Password: at least 8 characters. The first person to sign up becomes the flat admin. New accounts join as residents and wait for admin verification before the portal opens.</p>
         )}
       </form>
     </div>

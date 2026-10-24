@@ -24,7 +24,14 @@ final class Database
             return self::$pdo;
         }
         $c = self::$config;
-        $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', $c['host'], $c['database'], $c['charset'] ?? 'utf8mb4');
+        $port = isset($c['port']) && (int) $c['port'] > 0 ? (int) $c['port'] : 3306;
+        $dsn = sprintf(
+            'mysql:host=%s;port=%d;dbname=%s;charset=%s',
+            $c['host'],
+            $port,
+            $c['database'],
+            $c['charset'] ?? 'utf8mb4'
+        );
         self::$pdo = new PDO($dsn, $c['username'], $c['password'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

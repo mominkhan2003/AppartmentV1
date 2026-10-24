@@ -9,11 +9,15 @@ SET FOREIGN_KEY_CHECKS = 0;
 CREATE TABLE app_users (
   id            CHAR(36)     NOT NULL,
   email         VARCHAR(254) NOT NULL,
+  username      VARCHAR(40)  NULL,
   password_hash VARCHAR(255) NOT NULL,
+  approved      TINYINT(1)   NOT NULL DEFAULT 1,
+  force_password_change TINYINT(1) NOT NULL DEFAULT 0,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_app_users_email (email)
+  UNIQUE KEY uq_app_users_email (email),
+  UNIQUE KEY uq_app_users_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE user_roles (
@@ -94,10 +98,12 @@ CREATE TABLE audit_log (
 CREATE TABLE expenses (
   id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   kind              ENUM('shared','claim')                        NOT NULL,
+  funding_source    ENUM('pool','direct') NOT NULL DEFAULT 'pool',
   group_id          CHAR(36)      NULL,
   title             VARCHAR(120)  NOT NULL,
   description       VARCHAR(2000) NULL,
   category          VARCHAR(40)   NOT NULL DEFAULT 'general',
+  round_label       VARCHAR(60)   NULL,
   amount_cents      BIGINT        NOT NULL,
   expense_date      DATE          NOT NULL,
   payer_resident_id CHAR(36)      NULL,
@@ -142,8 +148,12 @@ CREATE TABLE ledger_entries (
   resident_id  CHAR(36)        NOT NULL,
   kind         ENUM('share','claim_credit','payment','adjustment') NOT NULL,
   amount_cents BIGINT          NOT NULL,
+  entry_date   DATE            NULL,
   expense_id   BIGINT UNSIGNED NULL,
   note         VARCHAR(500)    NULL,
+  round_label  VARCHAR(60)     NULL,
+  source       ENUM('cash','direct','adjustment') NOT NULL DEFAULT 'cash',
+  sort_order   INT             NOT NULL DEFAULT 0,
   created_by   CHAR(36)        NULL,
   created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -162,8 +172,34 @@ SELECT r.id AS resident_id,
        COALESCE(SUM(CASE WHEN l.kind = 'claim_credit' THEN l.amount_cents ELSE 0 END), 0) AS credits_cents,
        COALESCE(SUM(CASE WHEN l.kind = 'payment' THEN l.amount_cents ELSE 0 END), 0) AS payments_cents,
        COALESCE(SUM(CASE WHEN l.kind = 'adjustment' THEN l.amount_cents ELSE 0 END), 0) AS adjustments_cents
-FROM residents r JOIN ledger_entries l ON l.resident_id = r.id
+FROM residents r LEFT JOIN ledger_entries l ON l.resident_id = r.id
 GROUP BY r.id;
+
+CREATE TABLE contribution_rounds (
+  id                    CHAR(36)     NOT NULL,
+  round_no              INT          NOT NULL,
+  label                 VARCHAR(60)  NOT NULL,
+  target_per_member_cents BIGINT     NOT NULL DEFAULT 0,
+  collected_on          DATE         NOT NULL,
+  note                  VARCHAR(500) NULL,
+  created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_contribution_round_no (round_no),
+  KEY ix_contribution_round_date (collected_on)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE contribution_dues (
+  round_id      CHAR(36) NOT NULL,
+  resident_id   CHAR(36) NOT NULL,
+  required_cents BIGINT  NOT NULL DEFAULT 0,
+  paid_cents    BIGINT   NOT NULL DEFAULT 0,
+  status        ENUM('settled','pending','partial','credit') NOT NULL DEFAULT 'pending',
+  note          VARCHAR(500) NULL,
+  PRIMARY KEY (round_id, resident_id),
+  KEY ix_contribution_dues_resident (resident_id),
+  CONSTRAINT fk_dues_round    FOREIGN KEY (round_id)    REFERENCES contribution_rounds (id) ON DELETE CASCADE,
+  CONSTRAINT fk_dues_resident FOREIGN KEY (resident_id) REFERENCES residents (id)          ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE chores (
   id                  CHAR(36)     NOT NULL,

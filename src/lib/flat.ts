@@ -9,6 +9,9 @@ import type {
   Group,
   WashroomAccess,
   ResidentBalance,
+  PoolOverview,
+  FinanceOverview,
+  FinancialReport,
   ChoreEvent,
   Issue as IssueRow,
   LedgerEntry,
@@ -45,6 +48,18 @@ export const useWashroomAccess = () =>
   useQuery({ queryKey: ["washroom_access"], queryFn: () => api.get<WashroomAccess[]>("/washroom-access") });
 export const useBalances = () =>
   useQuery({ queryKey: ["balances"], queryFn: () => api.get<ResidentBalance[]>("/balances") });
+export const usePool = () =>
+  useQuery({ queryKey: ["pool"], queryFn: () => api.get<PoolOverview>("/pool") });
+export const useFinanceOverview = () =>
+  useQuery({
+    queryKey: ["finance-overview"],
+    queryFn: () => api.get<FinanceOverview>("/finance/overview"),
+  });
+export const useFinancialReport = () =>
+  useQuery({
+    queryKey: ["financial-report"],
+    queryFn: () => api.get<FinancialReport>("/financial-report"),
+  });
 export const useExpenses = () => useQuery({ queryKey: ["expenses"], queryFn: () => api.get<Expense[]>("/expenses") });
 export const useExpenseShares = () =>
   useQuery({ queryKey: ["expense_shares"], queryFn: () => api.get<ExpenseShare[]>("/expense-shares") });
@@ -60,13 +75,56 @@ export const useLedger = (residentId?: string | null) =>
   });
 export const useAudit = () =>
   useQuery({ queryKey: ["audit"], queryFn: () => api.get<AuditEntry[]>("/audit") });
+export const useAccounts = () =>
+  useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => api.get<import("@/lib/types").AccountRow[]>("/users"),
+  });
 
 export type ExpenseShare = {
   id: string;
   expense_id: number;
-  resident_id: string;
+  resident_id: string | null;
+  external_name?: string | null;
   amount_cents: number;
 };
+
+/* ------------------------------------------------------------- meal plan */
+
+export type MealPlan = {
+  week_start: string;
+  items: import("@/lib/types").MealPlanEntry[];
+};
+
+export const mealOrder = ["dinner", "lunch", "breakfast"] as const;
+export type MealKind = (typeof mealOrder)[number];
+
+/** Local-time helpers so "today" is always the user's calendar date, not UTC. */
+const isoOfDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+export function mondayOf(isoDate?: string): string {
+  const d = isoDate ? new Date(isoDate + "T12:00:00") : new Date();
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // back to Monday
+  return isoOfDay(d);
+}
+
+/** Stops at noon so comparisons stay inside the same calendar day in summer/winter zones. */
+export function shiftDays(iso: string, days: number): string {
+  if (!iso) return "";
+  const d = new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() + days);
+  return isoOfDay(d);
+}
+
+export function useMealPlan(week?: string) {
+  return useQuery({
+    queryKey: ["mealplan", week],
+    enabled: !!week,
+    queryFn: () => api.get<MealPlan>("/mealplan?week=" + week),
+  });
+}
 
 export function useRefresh() {
   const qc = useQueryClient();

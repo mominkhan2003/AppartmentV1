@@ -92,8 +92,41 @@ final class Routes
         $add('GET', '/balances', function (): void {
             Http::json(200, Repositories::residentBalances());
         });
+        $add('GET', '/pool', function (): void {
+            Http::json(200, Repositories::poolOverview());
+        });
+        $add('GET', '/finance/overview', function (): void {
+            Http::json(200, Repositories::financeOverview());
+        });
+        $add('GET', '/financial-report', function (): void {
+            Http::json(200, Repositories::financialReport());
+        });
         $add('GET', '/ledger/:id', function (array $p): void {
             Http::json(200, Repositories::ledger((string) $p['id']));
+        });
+
+        /* --------------------------------------------------------- weekly meal plan */
+        $add('GET', '/mealplan', function (array $p, array $q): void {
+            $week = date('Y-m-d', strtotime(Req::date($q, 'week') ?? date('Y-m-d')));
+            $days = ((int) date('N', strtotime($week))) - 1; // snap to that week's Monday
+            $week = date('Y-m-d', strtotime("-$days days", strtotime($week)));
+            Http::json(200, ['week_start' => $week, 'items' => Repositories::mealPlan($week)]);
+        });
+        $add('PUT', '/mealplan', function (): void {
+            Services::saveMealCell(Http::body());
+            Http::json(200, ['ok' => true]);
+        });
+        $add('DELETE', '/mealplan', function (array $p, array $q): void {
+            $week = date('Y-m-d', strtotime(Req::date($q, 'week') ?? date('Y-m-d')));
+            $days = ((int) date('N', strtotime($week))) - 1;
+            $week = date('Y-m-d', strtotime("-$days days", strtotime($week)));
+            $day = (int) ($q['day'] ?? 0);
+            $meal = in_array(($q['meal'] ?? ''), ['breakfast', 'lunch', 'dinner'], true) ? (string) $q['meal'] : '';
+            if ($meal === '') {
+                throw new ApiError(400, 'Unknown meal');
+            }
+            Services::deleteMealCell($week, $day, $meal);
+            Http::json(200, ['ok' => true]);
         });
 
         /* ------------------------------------------------------------- spaces */
@@ -313,6 +346,20 @@ final class Routes
         $add('POST', '/residents/:id/admin', function (array $p): void {
             $body = Http::body();
             Services::setAdmin((string) $p['id'], Req::bool($body, 'make_admin'));
+            Http::json(200, ['ok' => true]);
+        });
+
+        /* ------------------------------------------------------ user accounts */
+        $add('GET', '/users', function (): void {
+            Http::json(200, Repositories::accounts());
+        });
+        $add('POST', '/users/:id/approval', function (array $p): void {
+            $body = Http::body();
+            Services::setUserApproval((string) $p['id'], Req::bool($body, 'approve'));
+            Http::json(200, ['ok' => true]);
+        });
+        $add('DELETE', '/users/:id', function (array $p): void {
+            Services::deleteUser((string) $p['id']);
             Http::json(200, ['ok' => true]);
         });
 

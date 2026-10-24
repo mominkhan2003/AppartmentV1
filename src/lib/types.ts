@@ -73,8 +73,23 @@ export type Expense = {
 export type ExpenseShare = {
   id: string;
   expense_id: number;
-  resident_id: string;
+  /** null when the bill is split with a non-resident guest */
+  resident_id: string | null;
+  external_name?: string | null;
   amount_cents: number;
+};
+
+export type MealPlanEntry = {
+  id: number;
+  week_start: string;
+  day_of_week: number; // 1 = Monday .. 7 = Sunday
+  meal: "breakfast" | "lunch" | "dinner";
+  cook_resident_id: string | null;
+  cook_name: string | null;
+  participants: string[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ResidentBalance = {
@@ -84,6 +99,97 @@ export type ResidentBalance = {
   credits_cents: number | null;
   payments_cents: number | null;
   adjustments_cents: number | null;
+};
+
+export type PoolOverview = {
+  contributions_cents: number;
+  purchases_cents: number;
+  cash_contributions_cents: number;
+  direct_contributions_cents: number;
+  pool_purchases_cents: number;
+  direct_purchases_cents: number;
+  adjustments_cents: number;
+  claim_credits_cents: number;
+  pool_balance_cents: number;
+  formula: string;
+};
+
+export type ContributionDue = {
+  round_id: string;
+  resident_id: string;
+  display_name: string;
+  required_cents: number;
+  paid_cents: number;
+  status: "settled" | "pending" | "partial" | "credit";
+  note: string | null;
+};
+
+export type ContributionRound = {
+  id: string;
+  round_no: number;
+  label: string;
+  target_per_member_cents: number;
+  collected_on: string;
+  note: string | null;
+  dues: ContributionDue[];
+  collected_cents: number;
+  required_cents: number;
+};
+
+export type FinanceMember = {
+  id: string;
+  display_name: string;
+  username: string | null;
+  email: string | null;
+  active: boolean;
+  is_admin: boolean;
+  outstanding_cents: number;
+  status: "pending" | "settled";
+  status_note: string | null;
+  pending_round: {
+    round_no: number;
+    label: string;
+    required_cents: number;
+    paid_cents: number;
+  } | null;
+};
+
+export type FinanceOverview = {
+  pool: PoolOverview;
+  active_members: number;
+  members: FinanceMember[];
+  rounds: ContributionRound[];
+  next_budget_cents: number;
+};
+
+export type FinancialReportEntry = {
+  key: string;
+  date: string;
+  type: "contribution" | "expense" | "direct_payment" | "adjustment";
+  description: string;
+  paid_by: string;
+  amount_cents: number;
+  pool_delta_cents: number;
+  running_balance_cents: number;
+  round_label: string | null;
+  source: "cash" | "direct" | "pool" | "adjustment";
+};
+
+export type FinancialReport = {
+  title: string;
+  subtitle: string;
+  period_start: string;
+  period_end: string;
+  generated_at: string;
+  pool: PoolOverview;
+  active_members: number;
+  members: FinanceMember[];
+  member_status: FinanceMember[];
+  rounds: ContributionRound[];
+  entries: FinancialReportEntry[];
+  closing_balance_cents: number;
+  next_budget_cents: number;
+  pending_contribution_cents: number;
 };
 
 export type Chore = {
@@ -165,10 +271,25 @@ export type PortalRoleMember = { role_id: string; user_id: string };
 /* ------------------------------------------------------------------ me/auth */
 
 export type MePayload = {
-  user: { id: string; email: string };
+  user: { id: string; email: string; username?: string | null };
   isAdmin: boolean;
+  /** false right after signup until an admin verifies the account */
+  approved?: boolean;
+  /** true when the account still uses its seeded starting password */
+  force_password_change?: boolean;
   permissions: string[];
   resident: Resident | null;
+};
+
+export type AccountRow = {
+  id: string;
+  email: string;
+  approved: boolean;
+  created_at: string;
+  resident_id: string | null;
+  display_name: string | null;
+  admin_roles: number;
+  portal_roles: string | null;
 };
 
 export type AuthResult = { user: { id: string; email: string }; resident: Resident | null };

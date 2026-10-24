@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Pencil, Users } from "lucide-react";
+import { Plus, Pencil, Users, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Empty } from "@/components/flat/Page";
 import { Editor, TextField, Choice, Status, DataState, text } from "@/components/flat/Forms";
@@ -10,9 +10,19 @@ import {
   useRefresh,
   useGroups,
   useWashroomAccess,
+  useBalances,
+  eur,
+  toCents,
   type Resident,
 } from "@/lib/flat";
-import { createResident, updateResident, pageHead } from "@/lib/flat-actions";
+import {
+  createResident,
+  updateResident,
+  deleteResident,
+  recordPayment,
+  addAdjustment,
+  pageHead,
+} from "@/lib/flat-actions";
 export const Route = createFileRoute("/_authenticated/residents")({
   head: () =>
     pageHead("Residents", "Residents, room assignments, contact details and household groups."),
@@ -24,6 +34,7 @@ function Residents() {
   const { data: spaces = [] } = useSpaces();
   const { data: groups = [] } = useGroups();
   const { data: access = [] } = useWashroomAccess();
+  const { data: balances = [] } = useBalances();
   const { data: me } = useMe();
   const refresh = useRefresh();
   const rooms = spaces.filter((s) => s.kind === "bedroom").map((s) => ({ id: s.id, name: s.name }));
@@ -77,6 +88,56 @@ function Residents() {
       )}
     </Editor>
   );
+  const balanceEditor = (r: Resident) => (
+    <Editor
+      title={"Record balance · " + r.display_name}
+      trigger={
+        <Button variant="outline" size="icon" aria-label={"Record balance for " + r.display_name}>
+          <Wallet />
+        </Button>
+      }
+      onSave={async (d) => {
+        const amount = toCents(text(d, "amount"));
+        if (!Number.isFinite(amount) || amount === 0) throw new Error("Enter a non-zero amount");
+        const kind = text(d, "kind") || "payment";
+        if (kind === "payment") await recordPayment(r.id, amount, text(d, "reason"));
+        else await addAdjustment(r.id, amount, text(d, "reason"));
+        await refresh();
+      }}
+    >
+      <Choice
+        label="Entry kind"
+        name="kind"
+        value="payment"
+        options={[
+          { id: "payment", name: "Payment received (adds to balance)" },
+          { id: "adjustment", name: "Adjustment (signed, e.g. -1500 to charge)" },
+        ]}
+      />
+      <TextField label="Amount (EUR, signed)" name="amount" type="number" required />
+      <TextField label="Reason" name="reason" required />
+    </Editor>
+  );
+  const delEditor = (r: Resident) => (
+    <Editor
+      title={"Delete resident · " + r.display_name}
+      destructive
+      trigger={
+        <Button variant="outline" size="icon" aria-label={"Delete " + r.display_name}>
+          <Trash2 />
+        </Button>
+      }
+      onSave={async () => {
+        await deleteResident(r.id);
+        await refresh();
+      }}
+    >
+      <p className="text-sm text-muted-foreground">
+        Removes {r.display_name} & the room assignment. Their ledger and expense shares stay for the
+        books; a linked login account remains but loses its residency.
+      </p>
+    </Editor>
+  );
   return (
     <div>
       <PageHeader
@@ -95,7 +156,11 @@ function Residents() {
                 </span>
                 <h2 className="font-semibold break-words">{r.display_name}</h2>
               </div>
-              {(me?.isAdmin || r.user_id === me?.user.id) && edit(r)}
+              <div className="flex shrink-0 gap-1">
+                {(me?.isAdmin || r.user_id === me?.user.id) && edit(r)}
+                {me?.isAdmin && balanceEditor(r)}
+                {me?.isAdmin && delEditor(r)}
+              </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Status value={r.active ? "active" : "inactive"} />
@@ -103,6 +168,18 @@ function Residents() {
               <span className="text-sm text-muted-foreground">
                 {spaces.find((s) => s.id === r.room_id)?.name ?? "Room not assigned"}
               </span>
+              <span className="text-sm text-muted-foreground">
+                · Joined{" "}
+                {r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" }) : "—"}
+              </span>
+              {(() => {
+                const b = balances.find((x) => x.resident_id === r.id);
+                return b ? (
+                  <span className={"text-sm font-medium " + ((b.balance_cents ?? 0) < 0 ? "text-destructive" : "text-success")}>
+                    · {eur(b.balance_cents)}
+                  </span>
+                ) : null;
+              })()}
             </div>
             <div className="mt-3 space-y-1 text-sm">
               <p className="break-all">{r.email ?? "No email"}</p>

@@ -64,8 +64,17 @@ function Expenses() {
         const receipt_hash = file ? await fileHash(file) : null;
         const title = text(d, "title");
         if (title.length > 120) throw new Error("Keep the title within 120 characters");
+        const extNames = text(d, "externals")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 12)
+          .map((n) => "ext:" + n.slice(0, 100));
         if (shared) {
-          const selected = d.getAll("participants[]").map(String);
+          if (custom && extNames.length) {
+            throw new Error("Custom per-person amounts only support residents — turn Custom shares off to include non-resident guests");
+          }
+          const selected = d.getAll("participants[]").map(String).concat(extNames);
           const customShares = custom
             ? Object.fromEntries(selected.map((id) => [id, toCents(text(d, "share_" + id))]))
             : null;
@@ -157,6 +166,14 @@ function Expenses() {
               </div>
             ))}
           </fieldset>
+          <Field label="Non-resident guests (optional, comma separated)">
+            <input
+              name="externals"
+              type="text"
+              placeholder="e.g. Rahim, Sunil — billed in the split, not residents"
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+            />
+          </Field>
         </>
       ) : (
         <Choice
@@ -225,8 +242,10 @@ function Expenses() {
                 ?.filter((s) => s.expense_id === e.id)
                 .map((s) => (
                   <span key={s.id}>
-                    {residents.find((r) => r.id === s.resident_id)?.display_name}:{" "}
-                    {eur(s.amount_cents)}
+                    {(s.resident_id
+                      ? residents.find((r) => r.id === s.resident_id)?.display_name
+                      : (s.external_name ?? "Unknown") + " (non-resident)") ?? "Unknown"}
+                    : {eur(s.amount_cents)}
                   </span>
                 ))}
             </div>
