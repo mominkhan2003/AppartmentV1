@@ -9,8 +9,9 @@ import type { FinancialReport } from "@/lib/types";
 export function budgetCall(
   report: Pick<FinancialReport, "member_status" | "next_budget_cents" | "pool">,
 ) {
-  const settled = report.member_status.filter((member) => member.status === "settled");
-  const pending = report.member_status.filter((member) => member.status === "pending");
+  const active = report.member_status.filter((member) => member.active);
+  const settled = active.filter((member) => member.status === "settled");
+  const pending = active.filter((member) => member.status === "pending");
   const pendingCents = pending.reduce(
     (sum, member) => sum + Math.max(report.next_budget_cents, member.outstanding_cents),
     0,

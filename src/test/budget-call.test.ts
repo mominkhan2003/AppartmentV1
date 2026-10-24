@@ -20,11 +20,11 @@ function makeReport(pendingOutstanding: number): BudgetInput {
       formula: "overall_group_balance = total_group_contributions - total_group_purchases",
     },
     member_status: [
-      { status: "settled", outstanding_cents: 0 },
-      { status: "settled", outstanding_cents: 0 },
-      { status: "settled", outstanding_cents: 0 },
-      { status: "settled", outstanding_cents: 0 },
-      { status: "pending", outstanding_cents: pendingOutstanding },
+      { status: "settled", outstanding_cents: 0, active: true },
+      { status: "settled", outstanding_cents: 0, active: true },
+      { status: "settled", outstanding_cents: 0, active: true },
+      { status: "settled", outstanding_cents: 0, active: true },
+      { status: "pending", outstanding_cents: pendingOutstanding, active: true },
     ] as unknown as FinancialReport["member_status"],
   };
 }
