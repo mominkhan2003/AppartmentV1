@@ -2,7 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Stat, Empty } from "@/components/flat/Page";
 import { Editor, TextField, Notes, DataState, text } from "@/components/flat/Forms";
-import { eur, toCents, useBalances, useMe, useLedger, useResidents, useRefresh } from "@/lib/flat";
+import {
+  eur,
+  toCents,
+  useBalances,
+  useFinanceOverview,
+  useMe,
+  useLedger,
+  useResidents,
+  useRefresh,
+} from "@/lib/flat";
 import { recordPayment, addAdjustment, pageHead } from "@/lib/flat-actions";
 import { useState } from "react";
 import { Download } from "lucide-react";
@@ -18,11 +27,13 @@ function Balance() {
   const { data: me } = useMe();
   const { data: residents = [] } = useResidents();
   const { data: balances = [] } = useBalances();
+  const { data: finance } = useFinanceOverview();
   const [selected, setSelected] = useState("");
   const id = me?.isAdmin && selected ? selected : me?.resident?.id;
   const query = useLedger(id);
   const entries = query.data ?? [];
   const bal = balances.find((b) => b.resident_id === id);
+  const due = finance?.members.find((m) => m.id === id);
   const refresh = useRefresh();
   function exportCsv() {
     const csv =
@@ -69,15 +80,25 @@ function Balance() {
           </select>
         </label>
       )}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
-          label="Current balance"
+          label="Round dues outstanding"
+          value={eur(due?.outstanding_cents ?? 0)}
+          tone={(due?.outstanding_cents ?? 0) > 0 ? "bad" : "good"}
+        />
+        <Stat
+          label="Fair-share ledger"
           value={eur(bal?.balance_cents)}
           tone={(bal?.balance_cents ?? 0) < 0 ? "bad" : "good"}
         />
-        <Stat label="Approved reimbursements" value={eur(bal?.credits_cents)} />
         <Stat label="Payments recorded" value={eur(bal?.payments_cents)} />
+        <Stat label="Approved reimbursements" value={eur(bal?.credits_cents)} />
       </div>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+        Round dues track what is still owed for the current budget call. The fair-share ledger is
+        informational: payments made minus this member&apos;s equal share of every approved
+        purchase. All five fair-share balances add up to the live pool balance.
+      </p>
       {me?.isAdmin && id && (
         <div className="mt-5 flex flex-wrap gap-3">
           {(["payment", "adjustment"] as const).map((kind) => (

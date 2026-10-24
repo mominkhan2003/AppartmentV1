@@ -7,6 +7,7 @@ import { PageHeader, Empty } from "@/components/flat/Page";
 import { DataState } from "@/components/flat/Forms";
 import { pageHead } from "@/lib/flat-actions";
 import { downloadFinancialReport } from "@/lib/pdf-report";
+import { budgetCall } from "@/lib/budget-call";
 import { eur, useFinancialReport } from "@/lib/flat";
 
 export const Route = createFileRoute("/_authenticated/report")({
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/_authenticated/report")({
 function ReportPage() {
   const query = useFinancialReport();
   const report = query.data;
+  const call = report ? budgetCall(report) : null;
   const [downloading, setDownloading] = useState(false);
 
   async function download() {
@@ -241,16 +243,11 @@ function ReportPage() {
               Next step budget call
             </p>
             <p className="mt-2 text-sm text-[#78350f]">
-              Collect {eur(report.next_budget_cents)} from each member and{" "}
-              {eur(report.pending_contribution_cents)} from the pending member. This yields{" "}
-              {eur(report.next_budget_cents * 5 + report.pending_contribution_cents)}, leaving a clean
-              positive balance of{" "}
-              {eur(
-                report.next_budget_cents * 5 +
-                  report.pending_contribution_cents +
-                  report.pool.pool_balance_cents,
-              )}{" "}
-              for upcoming expenses.
+              Collect {eur(report.next_budget_cents)} from each of the {call?.settledCount ?? 0}{" "}
+              settled members and {eur(call?.pendingCents ?? 0)} from{" "}
+              {call?.pendingCount === 1 ? "the pending member" : "the pending members"}. This yields{" "}
+              {eur(call?.collectionCents ?? 0)}, leaving a clean positive balance of{" "}
+              {eur(call?.projectedBalanceCents ?? 0)} for upcoming expenses.
             </p>
           </section>
         </div>

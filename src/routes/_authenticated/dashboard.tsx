@@ -10,7 +10,6 @@ import { downloadFinancialReport } from "@/lib/pdf-report";
 import {
   eur,
   nameOf,
-  useBalances,
   useChores,
   useFinanceOverview,
   useFinancialReport,
@@ -34,7 +33,6 @@ function Dashboard() {
   const { data: me } = useMe();
   const { data: spaces = [] } = useSpaces();
   const { data: residents = [] } = useResidents();
-  const { data: balances = [] } = useBalances();
   const { data: finance } = useFinanceOverview();
   const reportQuery = useFinancialReport();
   const { data: chores = [] } = useChores();
@@ -42,11 +40,12 @@ function Dashboard() {
   const [sel, setSel] = useState<Space | null>(null);
   const [downloading, setDownloading] = useState(false);
 
-  const myBal = balances.find((b) => b.resident_id === me?.resident?.id)?.balance_cents ?? 0;
   const myChores = chores.filter((c) => c.current_resident_id === me?.resident?.id && c.active);
   const open = issues.filter((i) => i.status !== "resolved");
   const pool = finance?.pool;
   const members = finance?.members ?? [];
+  const myMember = members.find((m) => m.id === me?.resident?.id);
+  const myOutstanding = myMember?.outstanding_cents ?? 0;
   const pending = members.filter((m) => m.status === "pending");
   const settled = members.filter((m) => m.status === "settled");
   const pendingMember = pending[0];
@@ -176,13 +175,18 @@ function Dashboard() {
       )}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MiniStat label="Your balance" value={eur(myBal)} tone={myBal < 0 ? "bad" : "good"} />
+        <MiniStat
+          label="Your outstanding"
+          value={eur(myOutstanding)}
+          tone={myOutstanding > 0 ? "bad" : "good"}
+          note={myOutstanding > 0 ? "Round dues still open" : "All round dues settled"}
+        />
         <MiniStat label="Your duties now" value={String(myChores.length)} />
         <MiniStat label="Open issues" value={String(open.length)} />
         <MiniStat
           label="Next budget call"
           value={`${eur(finance?.next_budget_cents ?? 1000)} / member`}
-          note="Plus Asif's pending €11.00"
+          note={`${settled.length} settled members + ${eur(pendingMember?.outstanding_cents ?? 0)} pending`}
         />
       </section>
 

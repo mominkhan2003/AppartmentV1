@@ -10,7 +10,7 @@ import {
   useRefresh,
   useGroups,
   useWashroomAccess,
-  useBalances,
+  useFinanceOverview,
   eur,
   toCents,
   type Resident,
@@ -34,7 +34,7 @@ function Residents() {
   const { data: spaces = [] } = useSpaces();
   const { data: groups = [] } = useGroups();
   const { data: access = [] } = useWashroomAccess();
-  const { data: balances = [] } = useBalances();
+  const { data: finance } = useFinanceOverview();
   const { data: me } = useMe();
   const refresh = useRefresh();
   const rooms = spaces.filter((s) => s.kind === "bedroom").map((s) => ({ id: s.id, name: s.name }));
@@ -173,12 +173,15 @@ function Residents() {
                 {r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" }) : "—"}
               </span>
               {(() => {
-                const b = balances.find((x) => x.resident_id === r.id);
-                return b ? (
-                  <span className={"text-sm font-medium " + ((b.balance_cents ?? 0) < 0 ? "text-destructive" : "text-success")}>
-                    · {eur(b.balance_cents)}
+                const due = finance?.members.find((m) => m.id === r.id);
+                if (!due) return null;
+                return due.status === "pending" ? (
+                  <span className="text-sm font-medium text-[#92400e]">
+                    · {eur(due.outstanding_cents)} pending
                   </span>
-                ) : null;
+                ) : (
+                  <span className="text-sm font-medium text-emerald-700">· Dues settled</span>
+                );
               })()}
             </div>
             <div className="mt-3 space-y-1 text-sm">
